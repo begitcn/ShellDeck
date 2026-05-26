@@ -21,6 +21,8 @@ final class Server {
     var port: Int
     var username: String
     var authType: String
+    var group: ServerGroup?
+    var sortOrder: Int?
     var createdAt: Date
     var lastConnectedAt: Date?
 
@@ -31,6 +33,7 @@ final class Server {
         port: Int = 22,
         username: String,
         authType: AuthType = .password,
+        sortOrder: Int? = nil,
         createdAt: Date = Date()
     ) {
         self.id = id
@@ -39,6 +42,7 @@ final class Server {
         self.port = port
         self.username = username
         self.authType = authType.rawValue
+        self.sortOrder = sortOrder
         self.createdAt = createdAt
     }
 

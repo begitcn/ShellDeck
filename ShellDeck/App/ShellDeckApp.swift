@@ -4,7 +4,7 @@ import SwiftData
 @main
 struct ShellDeckApp: App {
     let container: ModelContainer = {
-        let schema = Schema([Server.self])
+        let schema = Schema([Server.self, ServerGroup.self])
         let configuration = ModelConfiguration(isStoredInMemoryOnly: false)
         do {
             return try ModelContainer(for: schema, configurations: configuration)

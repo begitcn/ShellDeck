@@ -6,9 +6,12 @@ struct AddServerView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
 
+    @Query(sort: \ServerGroup.sortOrder) private var groups: [ServerGroup]
+
     var server: Server?
 
     @State private var displayName = ""
+    @State private var selectedGroup: ServerGroup?
     @State private var host = ""
     @State private var port = 22
     @State private var username = ""
@@ -34,6 +37,14 @@ struct AddServerView: View {
                     }
                     TextField("用户名", text: $username)
                         .autocorrectionDisabled()
+                    if !groups.isEmpty {
+                        Picker("分组", selection: $selectedGroup) {
+                            Text("无").tag(Optional<ServerGroup>.none)
+                            ForEach(groups) { group in
+                                Text(group.name).tag(Optional.some(group))
+                            }
+                        }
+                    }
                 }
 
                 Section("认证方式") {
@@ -118,6 +129,7 @@ struct AddServerView: View {
         username = server.username
         authType = server.authTypeEnum
         originalAuthType = server.authTypeEnum
+        selectedGroup = server.group
 
         if authType == .password {
             password = (try? KeychainHelper.read(key: server.id.uuidString)) ?? ""
@@ -134,6 +146,7 @@ struct AddServerView: View {
             server.port = port
             server.username = username
             server.authTypeEnum = authType
+            server.group = selectedGroup
 
             if authType != originalAuthType {
                 KeychainHelper.delete(key: server.id.uuidString)
@@ -167,6 +180,9 @@ struct AddServerView: View {
                 username: username,
                 authType: authType
             )
+            newServer.group = selectedGroup
+            let allServers = (try? modelContext.fetch(FetchDescriptor<Server>())) ?? []
+            newServer.sortOrder = allServers.filter { $0.group?.id == selectedGroup?.id }.count
             modelContext.insert(newServer)
 
             do {
