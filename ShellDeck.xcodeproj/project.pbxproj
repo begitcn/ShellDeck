@@ -6,6 +6,11 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		DCE5EEA52FC5398B00AB26F0 /* SSHClient in Frameworks */ = {isa = PBXBuildFile; productRef = DCE5EEA42FC5398B00AB26F0 /* SSHClient */; };
+		DCE5EEA82FC5398C00AB26F0 /* SwiftTerm in Frameworks */ = {isa = PBXBuildFile; productRef = DCE5EEA72FC5398C00AB26F0 /* SwiftTerm */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileReference section */
 		DCE5EE952FC5371E00AB26F0 /* ShellDeck.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ShellDeck.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -23,6 +28,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				DCE5EEA52FC5398B00AB26F0 /* SSHClient in Frameworks */,
+				DCE5EEA82FC5398C00AB26F0 /* SwiftTerm in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -65,6 +72,8 @@
 			);
 			name = ShellDeck;
 			packageProductDependencies = (
+				DCE5EEA42FC5398B00AB26F0 /* SSHClient */,
+				DCE5EEA72FC5398C00AB26F0 /* SwiftTerm */,
 			);
 			productName = ShellDeck;
 			productReference = DCE5EE952FC5371E00AB26F0 /* ShellDeck.app */;
@@ -94,6 +103,10 @@
 			);
 			mainGroup = DCE5EE8C2FC5371E00AB26F0;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				C41358E4ECA744E499728AC3 /* SSHClient */,
+				DCE5EEA62FC5398C00AB26F0 /* XCRemoteSwiftPackageReference "SwiftTerm" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = DCE5EE962FC5371E00AB26F0 /* Products */;
 			projectDirPath = "";
@@ -250,6 +263,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = ShellDeck/App/Entitlements.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
@@ -282,6 +296,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = ShellDeck/App/Entitlements.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
@@ -331,6 +346,37 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		DCE5EEA62FC5398C00AB26F0 /* XCRemoteSwiftPackageReference "SwiftTerm" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/migueldeicaza/SwiftTerm";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.0.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		C41358E4ECA744E499728AC3 /* SSHClient */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/SSHClient;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		DCE5EEA42FC5398B00AB26F0 /* SSHClient */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C41358E4ECA744E499728AC3 /* SSHClient */;
+			productName = SSHClient;
+		};
+		DCE5EEA72FC5398C00AB26F0 /* SwiftTerm */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = DCE5EEA62FC5398C00AB26F0 /* XCRemoteSwiftPackageReference "SwiftTerm" */;
+			productName = SwiftTerm;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = DCE5EE8D2FC5371E00AB26F0 /* Project object */;
 }
