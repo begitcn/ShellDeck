@@ -7,6 +7,8 @@ struct ContentView: View {
     @State private var sshService = SSHService()
     @State private var terminalViewModel = TerminalViewModel()
     @State private var shell: SSHShell?
+    @State private var sftpService: SFTPService?
+    @State private var monitorService: MonitorService?
 
     var body: some View {
         NavigationSplitView {
@@ -95,6 +97,20 @@ struct ContentView: View {
                     Label("终端", systemImage: "terminal")
                 }
 
+            if let sftpService {
+                FileListView(sftpService: sftpService)
+                    .tabItem {
+                        Label("文件管理", systemImage: "folder")
+                    }
+            }
+
+            if let monitorService {
+                SystemMonitorView(monitorService: monitorService)
+                    .tabItem {
+                        Label("系统监控", systemImage: "gauge.medium")
+                    }
+            }
+
             if let server = selectedServer {
                 serverInfoTab(server)
             }
@@ -102,6 +118,12 @@ struct ContentView: View {
         .onAppear {
             if shell == nil {
                 Task { await requestShell() }
+            }
+            if sftpService == nil {
+                Task { await setupSFTP() }
+            }
+            if monitorService == nil {
+                setupMonitor()
             }
         }
     }
@@ -165,10 +187,34 @@ struct ContentView: View {
         }
     }
 
+    private func setupMonitor() {
+        guard monitorService == nil, let connection = sshService.connection else { return }
+        let service = MonitorService()
+        service.startMonitoring(connection: connection)
+        monitorService = service
+    }
+
+    private func setupSFTP() async {
+        guard sftpService == nil, let connection = sshService.connection else { return }
+        let service = SFTPService()
+        do {
+            try await service.connect(connection: connection)
+            sftpService = service
+        } catch {
+            print("[ShellDeck] SFTP 连接失败: \(error)")
+        }
+    }
+
     private func disconnect() {
         terminalViewModel.close()
         shell = nil
-        Task { await sshService.disconnect() }
+        monitorService?.stopMonitoring()
+        monitorService = nil
+        Task {
+            await sftpService?.disconnect()
+            sftpService = nil
+            await sshService.disconnect()
+        }
     }
 }
 

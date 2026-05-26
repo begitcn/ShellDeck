@@ -104,7 +104,7 @@
 			mainGroup = DCE5EE8C2FC5371E00AB26F0;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				C41358E4ECA744E499728AC3 /* SSHClient */,
+				C41358E4ECA744E499728AC3 /* XCLocalSwiftPackageReference "Packages/SSHClient" */,
 				DCE5EEA62FC5398C00AB26F0 /* XCRemoteSwiftPackageReference "SwiftTerm" */,
 			);
 			preferredProjectObjectVersion = 77;
@@ -347,6 +347,13 @@
 		};
 /* End XCConfigurationList section */
 
+/* Begin XCLocalSwiftPackageReference section */
+		C41358E4ECA744E499728AC3 /* XCLocalSwiftPackageReference "Packages/SSHClient" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/SSHClient;
+		};
+/* End XCLocalSwiftPackageReference section */
+
 /* Begin XCRemoteSwiftPackageReference section */
 		DCE5EEA62FC5398C00AB26F0 /* XCRemoteSwiftPackageReference "SwiftTerm" */ = {
 			isa = XCRemoteSwiftPackageReference;
@@ -358,17 +365,10 @@
 		};
 /* End XCRemoteSwiftPackageReference section */
 
-/* Begin XCLocalSwiftPackageReference section */
-		C41358E4ECA744E499728AC3 /* SSHClient */ = {
-			isa = XCLocalSwiftPackageReference;
-			relativePath = Packages/SSHClient;
-		};
-/* End XCLocalSwiftPackageReference section */
-
 /* Begin XCSwiftPackageProductDependency section */
 		DCE5EEA42FC5398B00AB26F0 /* SSHClient */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = C41358E4ECA744E499728AC3 /* SSHClient */;
+			package = C41358E4ECA744E499728AC3 /* XCLocalSwiftPackageReference "Packages/SSHClient" */;
 			productName = SSHClient;
 		};
 		DCE5EEA72FC5398C00AB26F0 /* SwiftTerm */ = {

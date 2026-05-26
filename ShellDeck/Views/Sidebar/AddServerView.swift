@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import UniformTypeIdentifiers
 
 struct AddServerView: View {
     @Environment(\.modelContext) private var modelContext
@@ -13,6 +14,7 @@ struct AddServerView: View {
     @State private var password = ""
     @State private var privateKey = ""
     @State private var passphrase = ""
+    @State private var showFilePicker = false
     @State private var errorMessage: String?
 
     var body: some View {
@@ -40,6 +42,11 @@ struct AddServerView: View {
                     if authType == .password {
                         SecureField("密码", text: $password)
                     } else {
+                        HStack {
+                            Button("选择密钥文件...") { showFilePicker = true }
+                                .controlSize(.small)
+                            Spacer()
+                        }
                         TextEditor(text: $privateKey)
                             .font(.body.monospaced())
                             .frame(minHeight: 150)
@@ -72,6 +79,26 @@ struct AddServerView: View {
                     Button("保存") { save() }
                         .disabled(host.isEmpty || username.isEmpty)
                 }
+            }
+        }
+        .fileImporter(
+            isPresented: $showFilePicker,
+            allowedContentTypes: [.plainText, UTType(filenameExtension: "pem"), UTType(filenameExtension: "key")].compactMap { $0 }
+        ) { result in
+            switch result {
+            case .success(let url):
+                guard url.startAccessingSecurityScopedResource() else {
+                    errorMessage = "无法访问所选文件"
+                    return
+                }
+                defer { url.stopAccessingSecurityScopedResource() }
+                do {
+                    privateKey = try String(contentsOf: url, encoding: .utf8)
+                } catch {
+                    errorMessage = "无法读取文件: \(error.localizedDescription)"
+                }
+            case .failure(let error):
+                errorMessage = "文件选择失败: \(error.localizedDescription)"
             }
         }
         .frame(minWidth: 420, minHeight: 480)
