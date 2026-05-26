@@ -1,12 +1,11 @@
 import SwiftUI
 import SwiftData
-import SSHClient
+import Citadel
 
 struct ContentView: View {
     @State private var selectedServer: Server?
     @State private var sshService = SSHService()
     @State private var terminalViewModel = TerminalViewModel()
-    @State private var shell: SSHShell?
     @State private var sftpService: SFTPService?
     @State private var monitorService: MonitorService?
 
@@ -116,8 +115,8 @@ struct ContentView: View {
             }
         }
         .onAppear {
-            if shell == nil {
-                Task { await requestShell() }
+            if !terminalViewModel.isConnected {
+                startTerminal()
             }
             if sftpService == nil {
                 Task { await setupSFTP() }
@@ -172,33 +171,26 @@ struct ContentView: View {
 
     private func connect(to server: Server) {
         terminalViewModel = TerminalViewModel()
-        shell = nil
         Task { await sshService.connect(to: server) }
     }
 
-    private func requestShell() async {
-        guard case .connected = sshService.state else { return }
-        do {
-            let newShell = try await sshService.requestShell()
-            shell = newShell
-            terminalViewModel.startSession(shell: newShell)
-        } catch {
-            await sshService.disconnect()
-        }
+    private func startTerminal() {
+        guard case .connected = sshService.state, let client = sshService.client else { return }
+        terminalViewModel.startSession(client: client)
     }
 
     private func setupMonitor() {
-        guard monitorService == nil, let connection = sshService.connection else { return }
+        guard monitorService == nil, let client = sshService.client else { return }
         let service = MonitorService()
-        service.startMonitoring(connection: connection)
+        service.startMonitoring(client: client)
         monitorService = service
     }
 
     private func setupSFTP() async {
-        guard sftpService == nil, let connection = sshService.connection else { return }
+        guard sftpService == nil, let client = sshService.client else { return }
         let service = SFTPService()
         do {
-            try await service.connect(connection: connection)
+            try await service.connect(client: client)
             sftpService = service
         } catch {
             print("[ShellDeck] SFTP 连接失败: \(error)")
@@ -207,7 +199,6 @@ struct ContentView: View {
 
     private func disconnect() {
         terminalViewModel.close()
-        shell = nil
         monitorService?.stopMonitoring()
         monitorService = nil
         Task {

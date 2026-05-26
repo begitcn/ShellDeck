@@ -1,5 +1,6 @@
 import Foundation
-import SSHClient
+import Citadel
+import NIOCore
 
 enum MonitorError: LocalizedError {
     case commandFailed(String)
@@ -20,13 +21,13 @@ final class MonitorService {
     private(set) var diskTotal: Double = 0.0
 
     private var monitoringTask: Task<Void, Never>?
-    private weak var connection: SSHConnection?
+    private weak var client: SSHClient?
 
     private let maxHistory = 20
     private let pollInterval: UInt64 = 3_000_000_000
 
-    func startMonitoring(connection: SSHConnection) {
-        self.connection = connection
+    func startMonitoring(client: SSHClient) {
+        self.client = client
         stopMonitoring()
 
         monitoringTask = Task { [weak self] in
@@ -69,15 +70,21 @@ final class MonitorService {
         diskTotal = 0
     }
 
+    // MARK: - Helpers
+
+    private func bufferToString(_ buffer: ByteBuffer) -> String? {
+        buffer.getString(at: buffer.readerIndex, length: buffer.readableBytes)
+    }
+
     // MARK: - Disk
 
     private func pollDisk() async throws {
-        guard let connection else { return }
-        let response = try await connection.execute(SSHCommand("df -k /"))
-        guard let output = response.standardOutput.flatMap({ String(data: $0, encoding: .utf8) }) else {
+        guard let client else { return }
+        let output = try await client.executeCommand("df -k /")
+        guard let text = bufferToString(output).flatMap({ $0.isEmpty ? nil : $0 }) else {
             throw MonitorError.commandFailed("df 无输出")
         }
-        let lines = output.split(separator: "\n")
+        let lines = text.split(separator: "\n")
         guard lines.count >= 2 else { throw MonitorError.commandFailed("df 输出格式错误") }
         let fields = lines[1].split(whereSeparator: \.isWhitespace).filter { !$0.isEmpty }
         guard fields.count >= 4 else { throw MonitorError.commandFailed("df 字段不足") }
@@ -91,14 +98,14 @@ final class MonitorService {
     // MARK: - Memory
 
     private func pollMemory() async throws -> Double {
-        guard let connection else { return 0 }
-        let response = try await connection.execute(SSHCommand("cat /proc/meminfo"))
-        guard let output = response.standardOutput.flatMap({ String(data: $0, encoding: .utf8) }) else {
+        guard let client else { return 0 }
+        let output = try await client.executeCommand("cat /proc/meminfo")
+        guard let text = bufferToString(output).flatMap({ $0.isEmpty ? nil : $0 }) else {
             throw MonitorError.commandFailed("meminfo 无输出")
         }
         var memTotal: Double = 0
         var memAvailable: Double = 0
-        for line in output.split(separator: "\n") {
+        for line in text.split(separator: "\n") {
             let parts = line.split(whereSeparator: \.isWhitespace)
             if line.hasPrefix("MemTotal:"), parts.count >= 2 {
                 memTotal = Double(parts[1]) ?? 0
@@ -124,10 +131,10 @@ final class MonitorService {
     }
 
     private func readCpuStats() async throws -> (idle: UInt64, total: UInt64) {
-        guard let connection else { return (0, 0) }
-        let response = try await connection.execute(SSHCommand("cat /proc/stat"))
-        guard let output = response.standardOutput.flatMap({ String(data: $0, encoding: .utf8) }),
-              let firstLine = output.split(separator: "\n").first,
+        guard let client else { return (0, 0) }
+        let output = try await client.executeCommand("cat /proc/stat")
+        guard let text = bufferToString(output).flatMap({ $0.isEmpty ? nil : $0 }),
+              let firstLine = text.split(separator: "\n").first,
               firstLine.hasPrefix("cpu ") else {
             throw MonitorError.commandFailed("stat 格式错误")
         }
@@ -136,7 +143,7 @@ final class MonitorService {
         return (vals[3], vals.reduce(0, +))
     }
 
-    // MARK: - Helpers
+    // MARK: - Trimming
 
     private func trimHistory(_ history: inout [MetricPoint]) {
         guard history.count > maxHistory else { return }

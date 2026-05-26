@@ -7,7 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		DCE5EEA52FC5398B00AB26F0 /* SSHClient in Frameworks */ = {isa = PBXBuildFile; productRef = DCE5EEA42FC5398B00AB26F0 /* SSHClient */; };
+
 		DCE5EEA82FC5398C00AB26F0 /* SwiftTerm in Frameworks */ = {isa = PBXBuildFile; productRef = DCE5EEA72FC5398C00AB26F0 /* SwiftTerm */; };
 /* End PBXBuildFile section */
 
@@ -28,7 +28,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				DCE5EEA52FC5398B00AB26F0 /* SSHClient in Frameworks */,
 				DCE5EEA82FC5398C00AB26F0 /* SwiftTerm in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -72,8 +71,8 @@
 			);
 			name = ShellDeck;
 			packageProductDependencies = (
-				DCE5EEA42FC5398B00AB26F0 /* SSHClient */,
 				DCE5EEA72FC5398C00AB26F0 /* SwiftTerm */,
+				D470153919404D91A655614F /* Citadel */,
 			);
 			productName = ShellDeck;
 			productReference = DCE5EE952FC5371E00AB26F0 /* ShellDeck.app */;
@@ -104,8 +103,8 @@
 			mainGroup = DCE5EE8C2FC5371E00AB26F0;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				C41358E4ECA744E499728AC3 /* XCLocalSwiftPackageReference "Packages/SSHClient" */,
 				DCE5EEA62FC5398C00AB26F0 /* XCRemoteSwiftPackageReference "SwiftTerm" */,
+				9D18DCA7FFC9473295F07380 /* XCRemoteSwiftPackageReference "Citadel" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = DCE5EE962FC5371E00AB26F0 /* Products */;
@@ -347,13 +346,6 @@
 		};
 /* End XCConfigurationList section */
 
-/* Begin XCLocalSwiftPackageReference section */
-		C41358E4ECA744E499728AC3 /* XCLocalSwiftPackageReference "Packages/SSHClient" */ = {
-			isa = XCLocalSwiftPackageReference;
-			relativePath = Packages/SSHClient;
-		};
-/* End XCLocalSwiftPackageReference section */
-
 /* Begin XCRemoteSwiftPackageReference section */
 		DCE5EEA62FC5398C00AB26F0 /* XCRemoteSwiftPackageReference "SwiftTerm" */ = {
 			isa = XCRemoteSwiftPackageReference;
@@ -363,18 +355,26 @@
 				minimumVersion = 1.0.0;
 			};
 		};
+		9D18DCA7FFC9473295F07380 /* XCRemoteSwiftPackageReference "Citadel" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/orlandos-nl/Citadel.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.12.1;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		DCE5EEA42FC5398B00AB26F0 /* SSHClient */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = C41358E4ECA744E499728AC3 /* XCLocalSwiftPackageReference "Packages/SSHClient" */;
-			productName = SSHClient;
-		};
 		DCE5EEA72FC5398C00AB26F0 /* SwiftTerm */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = DCE5EEA62FC5398C00AB26F0 /* XCRemoteSwiftPackageReference "SwiftTerm" */;
 			productName = SwiftTerm;
+		};
+		D470153919404D91A655614F /* Citadel */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 9D18DCA7FFC9473295F07380 /* XCRemoteSwiftPackageReference "Citadel" */;
+			productName = Citadel;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

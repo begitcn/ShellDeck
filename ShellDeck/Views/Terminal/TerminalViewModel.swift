@@ -1,29 +1,50 @@
 import Foundation
-import SSHClient
+import Citadel
+import NIOCore
+import NIOSSH
 
 @MainActor
 @Observable
 final class TerminalViewModel {
     private(set) var isConnected = false
-    private var shell: SSHShell?
-    private var readTask: Task<Void, Never>?
+    private var ptyTask: Task<Void, Never>?
+    private var stdinWriter: TTYStdinWriter?
 
-    /// 当 SSH 有输出到来时，TerminalContainerView 会设置此回调将字节喂给 TerminalView。
     var onOutput: ((ArraySlice<UInt8>) -> Void)?
 
-    func startSession(shell: SSHShell) {
-        if readTask != nil { close() }
-        self.shell = shell
+    func startSession(client: SSHClient) {
+        if ptyTask != nil { close() }
         isConnected = true
 
-        readTask = Task { [weak self] in
+        let request = SSHChannelRequestEvent.PseudoTerminalRequest(
+            wantReply: true,
+            term: "xterm-256color",
+            terminalCharacterWidth: 80,
+            terminalRowHeight: 24,
+            terminalPixelWidth: 0,
+            terminalPixelHeight: 0,
+            terminalModes: SSHTerminalModes([.ECHO: 1])
+        )
+
+        ptyTask = Task { [weak self] in
             do {
-                for try await data in shell.data {
-                    guard !Task.isCancelled else { break }
-                    self?.onOutput?(ArraySlice<UInt8>(data))
+                try await client.withPTY(request) { inbound, outbound in
+                    await MainActor.run {
+                        self?.stdinWriter = outbound
+                    }
+                    for try await output in inbound {
+                        switch output {
+                        case .stdout(let buffer):
+                            await MainActor.run {
+                                self?.onOutput?(ArraySlice<UInt8>(buffer.readableBytesView))
+                            }
+                        case .stderr:
+                            break
+                        }
+                    }
                 }
             } catch {
-                await MainActor.run { self?.isConnected = false }
+                print("[ShellDeck] PTY error: \(error)")
             }
             await MainActor.run { self?.isConnected = false }
         }
@@ -31,19 +52,15 @@ final class TerminalViewModel {
 
     func send(data: ArraySlice<UInt8>) {
         let raw = Data(data)
-        Task { [shell] in
-            do {
-                try await shell?.write(raw)
-            } catch {
-                print("[ShellDeck] SSH write error: \(error)")
-            }
+        Task { [writer = stdinWriter] in
+            try? await writer?.write(ByteBuffer(bytes: raw))
         }
     }
 
     func close() {
-        readTask?.cancel()
-        readTask = nil
-        shell = nil
+        ptyTask?.cancel()
+        ptyTask = nil
+        stdinWriter = nil
         isConnected = false
     }
 }
