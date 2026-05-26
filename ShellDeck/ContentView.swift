@@ -3,68 +3,51 @@ import SwiftData
 import Citadel
 
 struct ContentView: View {
+    private enum DetailTab: Hashable {
+        case terminal
+        case fileManager
+        case monitor
+        case info
+    }
+
     @State private var selectedServer: Server?
-    @State private var sshService = SSHService()
-    @State private var terminalViewModel = TerminalViewModel()
-    @State private var sftpService: SFTPService?
-    @State private var monitorService: MonitorService?
+    @State private var connections: [UUID: ServerConnection] = [:]
+    @State private var selectedTabsByServer: [UUID: DetailTab] = [:]
+    @State private var filePathsByServer: [UUID: String] = [:]
 
     var body: some View {
         NavigationSplitView {
-            ServerSidebarView(selection: $selectedServer)
+            ServerSidebarView(
+                selection: $selectedServer,
+                connectionStates: connectionStates,
+                onConnect: { connect(to: $0) },
+                onDisconnect: { disconnect($0) }
+            )
         } detail: {
             detailView
                 .toolbar {
-                    if case .connected = sshService.state {
+                    if let server = selectedServer, connections[server.id]?.state == .connected {
                         ToolbarItem {
-                            Button("断开连接") { disconnect() }
+                            Button("断开连接") { disconnect(server) }
                         }
                     }
                 }
         }
-        .onChange(of: selectedServer?.id) { _, _ in
-            disconnect()
-        }
     }
+
+    private var connectionStates: [UUID: ServerConnection.State] {
+        connections.mapValues(\.state)
+    }
+
+    // MARK: - Detail
 
     @ViewBuilder
     private var detailView: some View {
-        switch sshService.state {
-        case .disconnected:
-            disconnectedView
-        case .connecting:
-            connectingView
-        case .connected:
-            connectedView
-        case .failed(let error):
-            failedView(error)
-        }
-    }
-
-    // MARK: - 未选中 / 未连接
-
-    @ViewBuilder
-    private var disconnectedView: some View {
         if let server = selectedServer {
-            VStack(spacing: 20) {
-                Image(systemName: "server.rack")
-                    .font(.system(size: 48))
-                    .foregroundStyle(.secondary)
-                Text(server.displayName.isEmpty ? server.host : server.displayName)
-                    .font(.title2)
-                    .bold()
-                HStack(spacing: 16) {
-                    Label(server.host, systemImage: "network")
-                    Label("\(server.port)", systemImage: "number")
-                }
-                .foregroundStyle(.secondary)
-                Label("\(server.username)@\(server.host)", systemImage: "person")
-                    .foregroundStyle(.secondary)
-                Button("连接到服务器") {
-                    connect(to: server)
-                }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
+            if let conn = connections[server.id] {
+                connectionContentView(conn, server: server)
+            } else {
+                disconnectedServerView(server)
             }
         } else {
             ContentUnavailableView(
@@ -72,6 +55,46 @@ struct ContentView: View {
                 systemImage: "server.rack",
                 description: Text("在左侧选择一台服务器，或点击 + 添加新服务器")
             )
+        }
+    }
+
+    @ViewBuilder
+    private func connectionContentView(_ conn: ServerConnection, server: Server) -> some View {
+        switch conn.state {
+        case .disconnected:
+            disconnectedServerView(server)
+        case .connecting:
+            connectingView
+        case .connected:
+            connectedView(for: conn, server: server)
+        case .failed(let error):
+            failedView(error, server: server)
+        }
+    }
+
+    // MARK: - 未选中 / 未连接
+
+    @ViewBuilder
+    private func disconnectedServerView(_ server: Server) -> some View {
+        VStack(spacing: 20) {
+            Image(systemName: "server.rack")
+                .font(.system(size: 48))
+                .foregroundStyle(.secondary)
+            Text(server.displayName.isEmpty ? server.host : server.displayName)
+                .font(.title2)
+                .bold()
+            HStack(spacing: 16) {
+                Label(server.host, systemImage: "network")
+                Label("\(server.port)", systemImage: "number")
+            }
+            .foregroundStyle(.secondary)
+            Label("\(server.username)@\(server.host)", systemImage: "person")
+                .foregroundStyle(.secondary)
+            Button("连接到服务器") {
+                connect(to: server)
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
         }
     }
 
@@ -89,47 +112,44 @@ struct ContentView: View {
 
     // MARK: - 已连接
 
-    private var connectedView: some View {
-        TabView {
-            TerminalContainerView(viewModel: terminalViewModel)
+    private func connectedView(for conn: ServerConnection, server: Server) -> some View {
+        TabView(selection: selectedTabBinding(for: server.id)) {
+            TerminalContainerView(viewModel: conn.terminalViewModel)
+                .tag(DetailTab.terminal)
                 .tabItem {
                     Label("终端", systemImage: "terminal")
                 }
 
-            if let sftpService {
-                FileListView(sftpService: sftpService)
+            if let sftpService = conn.sftpService {
+                FileListView(
+                    sftpService: sftpService,
+                    currentPath: filePathBinding(for: server.id)
+                )
+                    .tag(DetailTab.fileManager)
                     .tabItem {
                         Label("文件管理", systemImage: "folder")
                     }
             }
 
-            if let monitorService {
+            if let monitorService = conn.monitorService {
                 SystemMonitorView(monitorService: monitorService)
+                    .tag(DetailTab.monitor)
                     .tabItem {
                         Label("系统监控", systemImage: "gauge.medium")
                     }
             }
 
-            if let server = selectedServer {
-                serverInfoTab(server)
-            }
-        }
-        .onAppear {
-            if !terminalViewModel.isConnected {
-                startTerminal()
-            }
-            if sftpService == nil {
-                Task { await setupSFTP() }
-            }
-            if monitorService == nil {
-                setupMonitor()
-            }
+            serverInfoTab(server)
+                .tag(DetailTab.info)
+                .tabItem {
+                    Label("信息", systemImage: "info.circle")
+                }
         }
     }
 
     // MARK: - 连接失败
 
-    private func failedView(_ error: Error) -> some View {
+    private func failedView(_ error: String, server: Server) -> some View {
         VStack(spacing: 16) {
             Image(systemName: "exclamationmark.triangle")
                 .font(.system(size: 48))
@@ -137,19 +157,17 @@ struct ContentView: View {
             Text("连接失败")
                 .font(.title2)
                 .bold()
-            Text(error.localizedDescription)
+            Text(error)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal)
-            if let server = selectedServer {
-                Button("重试") { connect(to: server) }
-                    .buttonStyle(.borderedProminent)
-            }
+            Button("重试") { connect(to: server) }
+                .buttonStyle(.borderedProminent)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    // MARK: - 信息 Tab（预留）
+    // MARK: - 信息 Tab
 
     private func serverInfoTab(_ server: Server) -> some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -170,42 +188,28 @@ struct ContentView: View {
     // MARK: - Actions
 
     private func connect(to server: Server) {
-        terminalViewModel = TerminalViewModel()
-        Task { await sshService.connect(to: server) }
+        let conn = ServerConnection(server: server)
+        connections[server.id] = conn
+        Task { await conn.connect(to: server) }
     }
 
-    private func startTerminal() {
-        guard case .connected = sshService.state, let client = sshService.client else { return }
-        terminalViewModel.startSession(client: client)
+    private func disconnect(_ server: Server) {
+        guard let conn = connections.removeValue(forKey: server.id) else { return }
+        Task { await conn.disconnect() }
     }
 
-    private func setupMonitor() {
-        guard monitorService == nil, let client = sshService.client else { return }
-        let service = MonitorService()
-        service.startMonitoring(client: client)
-        monitorService = service
+    private func selectedTabBinding(for serverID: UUID) -> Binding<DetailTab> {
+        Binding(
+            get: { selectedTabsByServer[serverID] ?? .terminal },
+            set: { selectedTabsByServer[serverID] = $0 }
+        )
     }
 
-    private func setupSFTP() async {
-        guard sftpService == nil, let client = sshService.client else { return }
-        let service = SFTPService()
-        do {
-            try await service.connect(client: client)
-            sftpService = service
-        } catch {
-            print("[ShellDeck] SFTP 连接失败: \(error)")
-        }
-    }
-
-    private func disconnect() {
-        terminalViewModel.close()
-        monitorService?.stopMonitoring()
-        monitorService = nil
-        Task {
-            await sftpService?.disconnect()
-            sftpService = nil
-            await sshService.disconnect()
-        }
+    private func filePathBinding(for serverID: UUID) -> Binding<String> {
+        Binding(
+            get: { filePathsByServer[serverID] ?? "/" },
+            set: { filePathsByServer[serverID] = $0 }
+        )
     }
 }
 

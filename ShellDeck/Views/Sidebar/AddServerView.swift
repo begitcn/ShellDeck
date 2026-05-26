@@ -6,11 +6,14 @@ struct AddServerView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
 
+    var server: Server?
+
     @State private var displayName = ""
     @State private var host = ""
     @State private var port = 22
     @State private var username = ""
     @State private var authType = AuthType.password
+    @State private var originalAuthType: AuthType = .password
     @State private var password = ""
     @State private var privateKey = ""
     @State private var passphrase = ""
@@ -70,7 +73,7 @@ struct AddServerView: View {
                 }
             }
             .formStyle(.grouped)
-            .navigationTitle("添加服务器")
+            .navigationTitle(server == nil ? "添加服务器" : "编辑服务器")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("取消") { dismiss() }
@@ -102,31 +105,84 @@ struct AddServerView: View {
             }
         }
         .frame(minWidth: 420, minHeight: 480)
+        .onAppear {
+            loadServerData()
+        }
+    }
+
+    private func loadServerData() {
+        guard let server else { return }
+        displayName = server.displayName
+        host = server.host
+        port = server.port
+        username = server.username
+        authType = server.authTypeEnum
+        originalAuthType = server.authTypeEnum
+
+        if authType == .password {
+            password = (try? KeychainHelper.read(key: server.id.uuidString)) ?? ""
+        } else {
+            privateKey = (try? KeychainHelper.read(key: server.id.uuidString + ".key")) ?? ""
+            passphrase = (try? KeychainHelper.read(key: server.id.uuidString + ".passphrase")) ?? ""
+        }
     }
 
     private func save() {
-        let server = Server(
-            displayName: displayName,
-            host: host,
-            port: port,
-            username: username,
-            authType: authType
-        )
-        modelContext.insert(server)
+        if let server {
+            server.displayName = displayName
+            server.host = host
+            server.port = port
+            server.username = username
+            server.authTypeEnum = authType
 
-        do {
-            switch authType {
-            case .password:
-                try KeychainHelper.save(key: server.id.uuidString, value: password)
-            case .privateKey:
-                try KeychainHelper.save(key: server.id.uuidString + ".key", value: privateKey)
-                if !passphrase.isEmpty {
-                    try KeychainHelper.save(key: server.id.uuidString + ".passphrase", value: passphrase)
-                }
+            if authType != originalAuthType {
+                KeychainHelper.delete(key: server.id.uuidString)
+                KeychainHelper.delete(key: server.id.uuidString + ".key")
+                KeychainHelper.delete(key: server.id.uuidString + ".passphrase")
             }
-            dismiss()
-        } catch {
-            errorMessage = "Keychain 保存失败: \(error.localizedDescription)"
+
+            do {
+                switch authType {
+                case .password:
+                    if !password.isEmpty {
+                        try KeychainHelper.save(key: server.id.uuidString, value: password)
+                    }
+                case .privateKey:
+                    if !privateKey.isEmpty {
+                        try KeychainHelper.save(key: server.id.uuidString + ".key", value: privateKey)
+                    }
+                    if !passphrase.isEmpty {
+                        try KeychainHelper.save(key: server.id.uuidString + ".passphrase", value: passphrase)
+                    }
+                }
+                dismiss()
+            } catch {
+                errorMessage = "Keychain 保存失败: \(error.localizedDescription)"
+            }
+        } else {
+            let newServer = Server(
+                displayName: displayName,
+                host: host,
+                port: port,
+                username: username,
+                authType: authType
+            )
+            modelContext.insert(newServer)
+
+            do {
+                switch authType {
+                case .password:
+                    try KeychainHelper.save(key: newServer.id.uuidString, value: password)
+                case .privateKey:
+                    try KeychainHelper.save(key: newServer.id.uuidString + ".key", value: privateKey)
+                    if !passphrase.isEmpty {
+                        try KeychainHelper.save(key: newServer.id.uuidString + ".passphrase", value: passphrase)
+                    }
+                }
+                dismiss()
+            } catch {
+                errorMessage = "Keychain 保存失败: \(error.localizedDescription)"
+            }
         }
     }
 }

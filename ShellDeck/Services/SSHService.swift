@@ -1,5 +1,4 @@
 import Foundation
-import SwiftData
 import Citadel
 import CryptoKit
 import CCryptoBoringSSL
@@ -36,48 +35,24 @@ enum SSHError: LocalizedError, Equatable {
     }
 }
 
-@MainActor
-@Observable
-final class SSHService {
-    enum ConnectionState {
-        case disconnected
-        case connecting
-        case connected(host: String)
-        case failed(Error)
+enum SSHService {
+    static func connect(to server: Server) async throws -> SSHClient {
+        let authMethod = try makeAuthenticationMethod(for: server)
+        return try await SSHClient.connect(to: SSHClientSettings(
+            host: server.host,
+            port: server.port,
+            authenticationMethod: { authMethod },
+            hostKeyValidator: .acceptAnything()
+        ))
     }
 
-    private(set) var state: ConnectionState = .disconnected
-    private(set) var client: SSHClient?
-
-    func connect(to server: Server) async {
-        state = .connecting
-
-        do {
-            let authMethod = try makeAuthenticationMethod(for: server)
-            let citadelClient = try await SSHClient.connect(to: SSHClientSettings(
-                host: server.host,
-                port: server.port,
-                authenticationMethod: { authMethod },
-                hostKeyValidator: .acceptAnything()
-            ))
-            self.client = citadelClient
-            state = .connected(host: server.host)
-        } catch let error as SSHError {
-            state = .failed(error)
-        } catch {
-            state = .failed(SSHError.connectionFailed(error))
-        }
-    }
-
-    func disconnect() async {
+    static func disconnect(_ client: SSHClient?) async {
         try? await client?.close()
-        client = nil
-        state = .disconnected
     }
 
     // MARK: - Authentication
 
-    private func makeAuthenticationMethod(for server: Server) throws -> SSHAuthenticationMethod {
+    private static func makeAuthenticationMethod(for server: Server) throws -> SSHAuthenticationMethod {
         switch server.authTypeEnum {
         case .password:
             let password: String
@@ -103,7 +78,7 @@ final class SSHService {
         }
     }
 
-    private func parseKey(pem: String, username: String) throws -> SSHAuthenticationMethod {
+    private static func parseKey(pem: String, username: String) throws -> SSHAuthenticationMethod {
         let trimmed = pem.trimmingCharacters(in: .whitespacesAndNewlines)
 
         if trimmed.contains("-----BEGIN OPENSSH PRIVATE KEY") {
@@ -139,83 +114,83 @@ final class SSHService {
 
     // MARK: - OpenSSH Format
 
-    private func parseOpenSSHKey(pem: String, username: String) throws -> SSHAuthenticationMethod {
+    private static func parseOpenSSHKey(pem: String, username: String) throws -> SSHAuthenticationMethod {
         let key = try parseOpenSSHEd25519(pem: pem)
         return .ed25519(username: username, privateKey: key)
     }
 
-private struct OpenSSHReader {
-    let data: Data
-    var offset: Int
+    private struct OpenSSHReader {
+        let data: Data
+        var offset: Int
 
-    init(data: Data) {
-        self.data = data
-        self.offset = 0
+        init(data: Data) {
+            self.data = data
+            self.offset = 0
+        }
+
+        mutating func readU32() throws -> UInt32 {
+            guard offset + 4 <= data.count else { throw SSHError.invalidPrivateKey }
+            let val = UInt32(data[offset]) << 24 | UInt32(data[offset+1]) << 16 | UInt32(data[offset+2]) << 8 | UInt32(data[offset+3])
+            offset += 4
+            return val
+        }
+
+        mutating func readString() throws -> Data {
+            let len = try readU32()
+            guard offset + Int(len) <= data.count else { throw SSHError.invalidPrivateKey }
+            let val = data.subdata(in: offset..<offset+Int(len))
+            offset += Int(len)
+            return val
+        }
     }
 
-    mutating func readU32() throws -> UInt32 {
-        guard offset + 4 <= data.count else { throw SSHError.invalidPrivateKey }
-        let val = UInt32(data[offset]) << 24 | UInt32(data[offset+1]) << 16 | UInt32(data[offset+2]) << 8 | UInt32(data[offset+3])
-        offset += 4
-        return val
+    // MARK: - OpenSSH Format
+
+    private static func parseOpenSSHEd25519(pem: String) throws -> Curve25519.Signing.PrivateKey {
+        let lines = pem.split(whereSeparator: \.isNewline)
+        guard lines.count >= 3 else { throw SSHError.invalidPrivateKey }
+        let base64 = lines.dropFirst().dropLast().joined()
+        guard let der = Data(base64Encoded: base64) else { throw SSHError.invalidPrivateKey }
+
+        var reader = OpenSSHReader(data: der)
+
+        let magic = "openssh-key-v1"
+        guard der.count >= magic.count + 1,
+              String(decoding: der[0..<magic.count], as: UTF8.self) == magic,
+              der[magic.count] == 0
+        else { throw SSHError.invalidPrivateKey }
+        reader.offset = magic.count + 1
+
+        let ciphername = String(decoding: try reader.readString(), as: UTF8.self)
+        let kdfname = String(decoding: try reader.readString(), as: UTF8.self)
+        _ = try reader.readString()
+        let numKeys = try reader.readU32()
+        for _ in 0..<numKeys { _ = try reader.readString() }
+        let encSection = try reader.readString()
+        guard ciphername == "none", kdfname == "none" else { throw SSHError.unsupportedPrivateKeyFormat }
+
+        var pr = OpenSSHReader(data: encSection)
+
+        let check1 = try pr.readU32()
+        let check2 = try pr.readU32()
+        guard check1 == check2 else { throw SSHError.invalidPrivateKey }
+
+        let keyType = String(decoding: try pr.readString(), as: UTF8.self)
+
+        switch keyType {
+        case "ssh-ed25519":
+            _ = try pr.readString()
+            let privData = try pr.readString()
+            guard privData.count >= 32 else { throw SSHError.invalidPrivateKey }
+            return try Curve25519.Signing.PrivateKey(rawRepresentation: privData[0..<32])
+        default:
+            throw SSHError.unsupportedPrivateKeyFormat
+        }
     }
-
-    mutating func readString() throws -> Data {
-        let len = try readU32()
-        guard offset + Int(len) <= data.count else { throw SSHError.invalidPrivateKey }
-        let val = data.subdata(in: offset..<offset+Int(len))
-        offset += Int(len)
-        return val
-    }
-}
-
-// MARK: - OpenSSH Format
-
-private func parseOpenSSHEd25519(pem: String) throws -> Curve25519.Signing.PrivateKey {
-    let lines = pem.split(whereSeparator: \.isNewline)
-    guard lines.count >= 3 else { throw SSHError.invalidPrivateKey }
-    let base64 = lines.dropFirst().dropLast().joined()
-    guard let der = Data(base64Encoded: base64) else { throw SSHError.invalidPrivateKey }
-
-    var reader = OpenSSHReader(data: der)
-
-    let magic = "openssh-key-v1"
-    guard der.count >= magic.count + 1,
-          String(decoding: der[0..<magic.count], as: UTF8.self) == magic,
-          der[magic.count] == 0
-    else { throw SSHError.invalidPrivateKey }
-    reader.offset = magic.count + 1
-
-    let ciphername = String(decoding: try reader.readString(), as: UTF8.self)
-    let kdfname = String(decoding: try reader.readString(), as: UTF8.self)
-    _ = try reader.readString()
-    let numKeys = try reader.readU32()
-    for _ in 0..<numKeys { _ = try reader.readString() }
-    let encSection = try reader.readString()
-    guard ciphername == "none", kdfname == "none" else { throw SSHError.unsupportedPrivateKeyFormat }
-
-    var pr = OpenSSHReader(data: encSection)
-
-    let check1 = try pr.readU32()
-    let check2 = try pr.readU32()
-    guard check1 == check2 else { throw SSHError.invalidPrivateKey }
-
-    let keyType = String(decoding: try pr.readString(), as: UTF8.self)
-
-    switch keyType {
-    case "ssh-ed25519":
-        _ = try pr.readString()
-        let privData = try pr.readString()
-        guard privData.count >= 32 else { throw SSHError.invalidPrivateKey }
-        return try Curve25519.Signing.PrivateKey(rawRepresentation: privData[0..<32])
-    default:
-        throw SSHError.unsupportedPrivateKeyFormat
-    }
-}
 
     // MARK: - RSA (via BoringSSL)
 
-    private func parseRSAKey(pem: String) throws -> Insecure.RSA.PrivateKey {
+    private static func parseRSAKey(pem: String) throws -> Insecure.RSA.PrivateKey {
         let cString = (pem as NSString).utf8String
         guard let cString = cString else { throw SSHError.invalidPrivateKey }
 
@@ -241,7 +216,7 @@ private func parseOpenSSHEd25519(pem: String) throws -> Curve25519.Signing.Priva
 
     // MARK: - Ed25519 PKCS#8
 
-    private func parseEd25519PKCS8(pem: String) throws -> Curve25519.Signing.PrivateKey {
+    private static func parseEd25519PKCS8(pem: String) throws -> Curve25519.Signing.PrivateKey {
         let lines = pem.split(whereSeparator: \.isNewline)
         guard lines.count >= 3,
               let first = lines.first, first.hasPrefix("-----BEGIN"),
@@ -309,7 +284,7 @@ private func parseOpenSSHEd25519(pem: String) throws -> Curve25519.Signing.Priva
 
     // MARK: - SEC1 Ed25519
 
-    private func parseSEC1Ed25519(pem: String) throws -> Curve25519.Signing.PrivateKey {
+    private static func parseSEC1Ed25519(pem: String) throws -> Curve25519.Signing.PrivateKey {
         let lines = pem.split(whereSeparator: \.isNewline)
         guard lines.count >= 3,
               let first = lines.first, first.hasPrefix("-----BEGIN EC PRIVATE KEY"),

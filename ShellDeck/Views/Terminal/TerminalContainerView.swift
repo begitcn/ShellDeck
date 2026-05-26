@@ -14,43 +14,38 @@ struct TerminalContainerView: NSViewRepresentable {
     let viewModel: TerminalViewModel
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(viewModel: viewModel)
+        Coordinator()
     }
 
     func makeNSView(context: Context) -> TerminalView {
         let terminal = FocusableTerminalView(frame: .zero)
         terminal.terminalDelegate = context.coordinator
         terminal.configureNativeColors()
-        context.coordinator.setOutputHandler(terminal: terminal)
+        context.coordinator.connect(viewModel: viewModel, terminal: terminal)
         return terminal
     }
 
     func updateNSView(_ nsView: TerminalView, context: Context) {
-        context.coordinator.viewModel = viewModel
+        guard context.coordinator.viewModel !== viewModel else { return }
+        context.coordinator.viewModel?.onOutput = nil
+        nsView.terminal.resetToInitialState()
+        context.coordinator.connect(viewModel: viewModel, terminal: nsView)
     }
 
     static func dismantleNSView(_ nsView: TerminalView, coordinator: Coordinator) {
-        coordinator.close()
+        coordinator.viewModel?.onOutput = nil
     }
 }
 
 extension TerminalContainerView {
     final class Coordinator: TerminalViewDelegate {
-        var viewModel: TerminalViewModel?
+        private(set) var viewModel: TerminalViewModel?
 
-        init(viewModel: TerminalViewModel) {
+        func connect(viewModel: TerminalViewModel, terminal: TerminalView) {
             self.viewModel = viewModel
-        }
-
-        func setOutputHandler(terminal: TerminalView) {
-            viewModel?.onOutput = { [weak terminal] bytes in
+            viewModel.onOutput = { [weak terminal] bytes in
                 terminal?.feed(byteArray: bytes)
             }
-        }
-
-        func close() {
-            viewModel?.onOutput = nil
-            viewModel?.close()
         }
 
         // MARK: - TerminalViewDelegate

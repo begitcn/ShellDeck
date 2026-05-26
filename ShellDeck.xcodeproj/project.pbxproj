@@ -7,8 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-
 		DCE5EEA82FC5398C00AB26F0 /* SwiftTerm in Frameworks */ = {isa = PBXBuildFile; productRef = DCE5EEA72FC5398C00AB26F0 /* SwiftTerm */; };
+		DCE5F1B22FC5831D00AB26F0 /* Citadel in Frameworks */ = {isa = PBXBuildFile; productRef = D470153919404D91A655614F /* Citadel */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -28,6 +28,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				DCE5F1B22FC5831D00AB26F0 /* Citadel in Frameworks */,
 				DCE5EEA82FC5398C00AB26F0 /* SwiftTerm in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -347,14 +348,6 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
-		DCE5EEA62FC5398C00AB26F0 /* XCRemoteSwiftPackageReference "SwiftTerm" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/migueldeicaza/SwiftTerm";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 1.0.0;
-			};
-		};
 		9D18DCA7FFC9473295F07380 /* XCRemoteSwiftPackageReference "Citadel" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/orlandos-nl/Citadel.git";
@@ -363,18 +356,26 @@
 				minimumVersion = 0.12.1;
 			};
 		};
+		DCE5EEA62FC5398C00AB26F0 /* XCRemoteSwiftPackageReference "SwiftTerm" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/migueldeicaza/SwiftTerm";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.0.0;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		DCE5EEA72FC5398C00AB26F0 /* SwiftTerm */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = DCE5EEA62FC5398C00AB26F0 /* XCRemoteSwiftPackageReference "SwiftTerm" */;
-			productName = SwiftTerm;
-		};
 		D470153919404D91A655614F /* Citadel */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 9D18DCA7FFC9473295F07380 /* XCRemoteSwiftPackageReference "Citadel" */;
 			productName = Citadel;
+		};
+		DCE5EEA72FC5398C00AB26F0 /* SwiftTerm */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = DCE5EEA62FC5398C00AB26F0 /* XCRemoteSwiftPackageReference "SwiftTerm" */;
+			productName = SwiftTerm;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

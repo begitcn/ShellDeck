@@ -2,8 +2,8 @@ import SwiftUI
 
 struct FileListView: View {
     let sftpService: SFTPService
+    @Binding var currentPath: String
 
-    @State private var currentPath = "/"
     @State private var items: [SFTPItem] = []
     @State private var selectedItem: SFTPItem.ID?
     @State private var isLoading = false
@@ -38,6 +38,15 @@ struct FileListView: View {
         .onAppear {
             Task { await loadDirectory() }
         }
+        .onChange(of: serviceIdentity) { _, _ in
+            selectedItem = nil
+            items = []
+            Task { await loadDirectory() }
+        }
+    }
+
+    private var serviceIdentity: ObjectIdentifier {
+        ObjectIdentifier(sftpService)
     }
 
     // MARK: - Toolbar

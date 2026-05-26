@@ -9,12 +9,20 @@ final class TerminalViewModel {
     private(set) var isConnected = false
     private var ptyTask: Task<Void, Never>?
     private var stdinWriter: TTYStdinWriter?
+    private var outputBuffer: [UInt8] = []
+    private let maxBufferedBytes = 256 * 1024
 
-    var onOutput: ((ArraySlice<UInt8>) -> Void)?
+    var onOutput: ((ArraySlice<UInt8>) -> Void)? {
+        didSet {
+            guard let onOutput, !outputBuffer.isEmpty else { return }
+            onOutput(ArraySlice(outputBuffer))
+        }
+    }
 
     func startSession(client: SSHClient) {
         if ptyTask != nil { close() }
         isConnected = true
+        outputBuffer.removeAll(keepingCapacity: true)
 
         let request = SSHChannelRequestEvent.PseudoTerminalRequest(
             wantReply: true,
@@ -36,7 +44,9 @@ final class TerminalViewModel {
                         switch output {
                         case .stdout(let buffer):
                             await MainActor.run {
-                                self?.onOutput?(ArraySlice<UInt8>(buffer.readableBytesView))
+                                let chunk = Array(buffer.readableBytesView)
+                                self?.appendToBuffer(chunk)
+                                self?.onOutput?(ArraySlice(chunk))
                             }
                         case .stderr:
                             break
@@ -62,5 +72,14 @@ final class TerminalViewModel {
         ptyTask = nil
         stdinWriter = nil
         isConnected = false
+    }
+
+    private func appendToBuffer(_ bytes: [UInt8]) {
+        guard !bytes.isEmpty else { return }
+        outputBuffer.append(contentsOf: bytes)
+
+        if outputBuffer.count > maxBufferedBytes {
+            outputBuffer.removeFirst(outputBuffer.count - maxBufferedBytes)
+        }
     }
 }
