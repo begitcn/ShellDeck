@@ -97,7 +97,7 @@ struct AddServerView: View {
         }
         .fileImporter(
             isPresented: $showFilePicker,
-            allowedContentTypes: [.plainText, UTType(filenameExtension: "pem"), UTType(filenameExtension: "key")].compactMap { $0 }
+            allowedContentTypes: [.item]
         ) { result in
             switch result {
             case .success(let url):
