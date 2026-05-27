@@ -67,6 +67,7 @@ mkdir -p "$EXPORT_DIR"
 if [ "${CODE_SIGNING_ALLOWED:-YES}" = "NO" ]; then
     # CI build: skip signing entirely, export as raw app
     xcodebuild \
+        -exportArchive \
         -archivePath "$ARCHIVE_PATH" \
         -exportPath "$EXPORT_DIR" \
         -exportOptionsPlist /dev/stdin <<< '<?xml version="1.0" encoding="UTF-8"?>
@@ -83,6 +84,7 @@ if [ "${CODE_SIGNING_ALLOWED:-YES}" = "NO" ]; then
 </plist>'
 else
     xcodebuild \
+        -exportArchive \
         -archivePath "$ARCHIVE_PATH" \
         -exportPath "$EXPORT_DIR" \
         -exportOptionsPlist /dev/stdin <<< '<?xml version="1.0" encoding="UTF-8"?>
