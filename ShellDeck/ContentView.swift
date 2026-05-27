@@ -14,11 +14,17 @@ struct ContentView: View {
     @State private var connections: [UUID: ServerConnection] = [:]
     @State private var selectedTabsByServer: [UUID: DetailTab] = [:]
     @State private var filePathsByServer: [UUID: String] = [:]
+    @State private var sidebarMode: SidebarMode = .ssh
+    @State private var localSelection: UUID?
+    @State private var localManager = LocalTerminalManager()
 
     var body: some View {
         NavigationSplitView {
             ServerSidebarView(
                 selection: $selectedServer,
+                sidebarMode: $sidebarMode,
+                localSelection: $localSelection,
+                localManager: localManager,
                 connectionStates: connectionStates,
                 onConnect: { connect(to: $0) },
                 onDisconnect: { disconnect($0) }
@@ -26,13 +32,14 @@ struct ContentView: View {
         } detail: {
             detailView
                 .toolbar {
-                    if let server = selectedServer, connections[server.id]?.state == .connected {
+                    if sidebarMode == .ssh, let server = selectedServer, connections[server.id]?.state == .connected {
                         ToolbarItem {
                             Button("断开连接") { disconnect(server) }
                         }
                     }
                 }
         }
+        .environment(localManager)
     }
 
     private var connectionStates: [UUID: ServerConnection.State] {
@@ -43,7 +50,9 @@ struct ContentView: View {
 
     @ViewBuilder
     private var detailView: some View {
-        if let server = selectedServer {
+        if sidebarMode == .local {
+            LocalTerminalView()
+        } else if let server = selectedServer {
             if let conn = connections[server.id] {
                 connectionContentView(conn, server: server)
             } else {
@@ -188,6 +197,9 @@ struct ContentView: View {
     // MARK: - Actions
 
     private func connect(to server: Server) {
+        if let existing = connections[server.id] {
+            Task { await existing.disconnect() }
+        }
         let conn = ServerConnection(server: server)
         connections[server.id] = conn
         Task { await conn.connect(to: server) }
@@ -195,6 +207,8 @@ struct ContentView: View {
 
     private func disconnect(_ server: Server) {
         guard let conn = connections.removeValue(forKey: server.id) else { return }
+        selectedTabsByServer[server.id] = nil
+        filePathsByServer[server.id] = nil
         Task { await conn.disconnect() }
     }
 

@@ -24,7 +24,7 @@ struct KeychainHelper {
         guard let data = value.data(using: .utf8) else {
             throw KeychainError.invalidData
         }
-        try? delete(key: key)
+        delete(key: key)
 
         var query = [String: Any]()
         query[String(kSecClass)] = kSecClassGenericPassword

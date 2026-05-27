@@ -1,11 +1,28 @@
 import SwiftUI
 import SwiftData
 
+enum SidebarMode: String, CaseIterable, Identifiable {
+    case ssh = "SSH 服务器"
+    case local = "本地终端"
+
+    var id: String { rawValue }
+
+    var icon: String {
+        switch self {
+        case .ssh: return "server.rack"
+        case .local: return "terminal"
+        }
+    }
+}
+
 struct ServerSidebarView: View {
     @Query(sort: \ServerGroup.name) var groups: [ServerGroup]
     @Query(sort: \Server.displayName) var servers: [Server]
     @Environment(\.modelContext) private var modelContext
     @Binding var selection: Server?
+    @Binding var sidebarMode: SidebarMode
+    @Binding var localSelection: UUID?
+    let localManager: LocalTerminalManager
     let connectionStates: [UUID: ServerConnection.State]
     let onConnect: (Server) -> Void
     let onDisconnect: (Server) -> Void
@@ -28,17 +45,17 @@ struct ServerSidebarView: View {
     private let ungroupedSectionID = UUID(uuidString: "00000000-0000-0000-0000-000000000000")!
 
     var body: some View {
-        List(selection: $selection) {
-            if groups.isEmpty {
-                flatList
+        VStack(spacing: 0) {
+            modePicker
+            Divider()
+            if sidebarMode == .ssh {
+                sshContent
             } else {
-                groupedList
-                ungroupedSection
+                localContent
             }
         }
-        .navigationTitle("服务器")
+        .navigationTitle(sidebarMode == .ssh ? "服务器" : "本地终端")
         .toolbar { toolbarContent }
-        .overlay { emptyOverlay }
         .sheet(isPresented: $showAddSheet) { AddServerView() }
         .sheet(item: $editingServer) { server in AddServerView(server: server) }
         .sheet(isPresented: $showAddGroupSheet) { addGroupSheet }
@@ -59,7 +76,74 @@ struct ServerSidebarView: View {
         }
     }
 
-    // MARK: - Sub-views
+    // MARK: - Mode Picker
+
+    private var modePicker: some View {
+        Picker("模式", selection: $sidebarMode) {
+            ForEach(SidebarMode.allCases) { mode in
+                Label(mode.rawValue, systemImage: mode.icon).tag(mode)
+            }
+        }
+        .pickerStyle(.segmented)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+    }
+
+    // MARK: - SSH Content
+
+    private var sshContent: some View {
+        List(selection: $selection) {
+            if groups.isEmpty {
+                flatList
+            } else {
+                groupedList
+                ungroupedSection
+            }
+        }
+        .overlay { emptyOverlay }
+    }
+
+    // MARK: - Local Content
+
+    private var localContent: some View {
+        List(selection: $localSelection) {
+            ForEach(localManager.sessions) { session in
+                HStack(spacing: 8) {
+                    Image(systemName: session.isRunning ? "terminal" : "xmark.circle")
+                        .foregroundStyle(session.isRunning ? .green : .secondary)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(session.title)
+                            .font(.headline)
+                        Text(session.isRunning ? "运行中" : "已退出")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                }
+                .padding(.vertical, 4)
+                .contentShape(Rectangle())
+                .tag(session.id as UUID?)
+                .contextMenu {
+                    Button("重命名") { /* TODO */ }
+                    Divider()
+                    Button("关闭", role: .destructive) {
+                        localManager.closeSession(id: session.id)
+                    }
+                }
+            }
+        }
+        .overlay {
+            localManager.sessions.isEmpty
+                ? AnyView(ContentUnavailableView(
+                    "没有终端",
+                    systemImage: "terminal",
+                    description: Text("点击 + 新建本地终端")
+                ))
+                : AnyView(EmptyView())
+        }
+    }
+
+    // MARK: - Sub-views (SSH)
 
     private var flatList: some View {
         ForEach(servers) { server in
@@ -114,17 +198,23 @@ struct ServerSidebarView: View {
             : AnyView(EmptyView())
     }
 
+    // MARK: - Toolbar
+
     private var toolbarContent: some ToolbarContent {
         ToolbarItemGroup {
-            if let selection, let server = servers.first(where: { $0.id == selection.id }) {
-                Button { editingServer = server } label: { Label("编辑", systemImage: "pencil") }
-                Button(role: .destructive) { serverToDelete = server; showDeleteConfirmation = true }
-                    label: { Label("删除", systemImage: "trash") }
+            if sidebarMode == .ssh {
+                if let selection, let server = servers.first(where: { $0.id == selection.id }) {
+                    Button { editingServer = server } label: { Label("编辑", systemImage: "pencil") }
+                    Button(role: .destructive) { serverToDelete = server; showDeleteConfirmation = true }
+                        label: { Label("删除", systemImage: "trash") }
+                }
+                Menu {
+                    Button("服务器", systemImage: "server.rack") { showAddSheet = true }
+                    Button("分组", systemImage: "folder") { showAddGroupSheet = true }
+                } label: { Label("添加", systemImage: "plus") }
+            } else {
+                Button { localManager.createSession() } label: { Label("新建终端", systemImage: "plus") }
             }
-            Menu {
-                Button("服务器", systemImage: "server.rack") { showAddSheet = true }
-                Button("分组", systemImage: "folder") { showAddGroupSheet = true }
-            } label: { Label("添加", systemImage: "plus") }
         }
     }
 
@@ -329,6 +419,9 @@ struct ServerSidebarView: View {
     NavigationStack {
         ServerSidebarView(
             selection: .constant(nil),
+            sidebarMode: .constant(.ssh),
+            localSelection: .constant(nil),
+            localManager: LocalTerminalManager(),
             connectionStates: [:],
             onConnect: { _ in },
             onDisconnect: { _ in }
