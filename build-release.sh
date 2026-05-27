@@ -31,58 +31,56 @@ for arg in "$@"; do
 done
 
 # ============================================================
-# Step 1: Build Archive
+# Step 1: Build (archive mode for local, direct build for CI)
 # ============================================================
 echo "==> $PROJECT_NAME Build v$APP_VERSION"
 echo ""
-
-echo "Building archive..."
 rm -rf "$ARCHIVE_PATH" "$BUILD_DIR"
 
-xcodebuild \
-    -project "$PROJECT_NAME.xcodeproj" \
-    -scheme "$SCHEME" \
-    -configuration Release \
-    -archivePath "$ARCHIVE_PATH" \
-    archive \
-    MARKETING_VERSION="$APP_VERSION" \
-    CURRENT_PROJECT_VERSION="1" \
-    ${MACOSX_DEPLOYMENT_TARGET:+MACOSX_DEPLOYMENT_TARGET=$MACOSX_DEPLOYMENT_TARGET} \
-    ${CODE_SIGN_IDENTITY:+CODE_SIGN_IDENTITY=$CODE_SIGN_IDENTITY} \
-    ${CODE_SIGNING_REQUIRED:+CODE_SIGNING_REQUIRED=$CODE_SIGNING_REQUIRED} \
-    ${CODE_SIGNING_ALLOWED:+CODE_SIGNING_ALLOWED=$CODE_SIGNING_ALLOWED}
-
-echo "   Archive built at $ARCHIVE_PATH"
-
-# ============================================================
-# Step 2: Export App Bundle
-# ============================================================
-echo ""
-echo "Exporting app bundle..."
-
-EXPORT_DIR="$DIST_DIR/.export"
-rm -rf "$EXPORT_DIR"
-mkdir -p "$EXPORT_DIR"
-
 if [ "${CODE_SIGNING_ALLOWED:-YES}" = "NO" ]; then
-    # CI build: skip signing entirely, export as raw app
+    # CI mode: build directly, no archive/export pipeline
+    echo "Building (CI mode, no signing)..."
     xcodebuild \
-        -exportArchive \
-        -archivePath "$ARCHIVE_PATH" \
-        -exportPath "$EXPORT_DIR" \
-        -exportOptionsPlist /dev/stdin <<< '<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>method</key>
-    <string>developer-id</string>
-    <key>signingStyle</key>
-    <string>manual</string>
-    <key>signingDisabled</key>
-    <true/>
-</dict>
-</plist>'
+        -project "$PROJECT_NAME.xcodeproj" \
+        -scheme "$SCHEME" \
+        -configuration Release \
+        -derivedDataPath "$BUILD_DIR" \
+        build \
+        MARKETING_VERSION="$APP_VERSION" \
+        CURRENT_PROJECT_VERSION="1" \
+        MACOSX_DEPLOYMENT_TARGET="${MACOSX_DEPLOYMENT_TARGET:-26.2}" \
+        CODE_SIGN_IDENTITY="" \
+        CODE_SIGNING_REQUIRED=NO \
+        CODE_SIGNING_ALLOWED=NO \
+        DEVELOPMENT_TEAM=""
+
+    APP_BUNDLE="$BUILD_DIR/Build/Products/Release/$PROJECT_NAME.app"
+    if [ ! -d "$APP_BUNDLE" ]; then
+        echo "Error: built .app not found at $APP_BUNDLE"
+        exit 1
+    fi
 else
+    # Local mode: archive + export (signed)
+    echo "Building archive..."
+    xcodebuild \
+        -project "$PROJECT_NAME.xcodeproj" \
+        -scheme "$SCHEME" \
+        -configuration Release \
+        -archivePath "$ARCHIVE_PATH" \
+        archive \
+        MARKETING_VERSION="$APP_VERSION" \
+        CURRENT_PROJECT_VERSION="1" \
+        MACOSX_DEPLOYMENT_TARGET="${MACOSX_DEPLOYMENT_TARGET:-26.4}" \
+        DEVELOPMENT_TEAM="${DEVELOPMENT_TEAM-MCR7XLP8BR}"
+
+    echo "   Archive built at $ARCHIVE_PATH"
+
+    echo ""
+    echo "Exporting app bundle..."
+    EXPORT_DIR="$DIST_DIR/.export"
+    rm -rf "$EXPORT_DIR"
+    mkdir -p "$EXPORT_DIR"
+
     xcodebuild \
         -exportArchive \
         -archivePath "$ARCHIVE_PATH" \
@@ -97,16 +95,15 @@ else
     <string>automatic</string>
 </dict>
 </plist>'
+
+    APP_BUNDLE=$(find "$EXPORT_DIR" -name "*.app" -maxdepth 1 -type d | head -1)
+    if [ -z "$APP_BUNDLE" ]; then
+        echo "Error: exported .app not found"
+        exit 1
+    fi
 fi
 
-# Find the exported .app
-APP_BUNDLE=$(find "$EXPORT_DIR" -name "*.app" -maxdepth 1 -type d | head -1)
-if [ -z "$APP_BUNDLE" ]; then
-    echo "Error: exported .app not found"
-    exit 1
-fi
-
-echo "   Exported: $APP_BUNDLE"
+echo "   App bundle: $APP_BUNDLE"
 
 # ============================================================
 # Step 3: Create DMG

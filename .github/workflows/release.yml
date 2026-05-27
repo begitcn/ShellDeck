@@ -24,9 +24,6 @@ jobs:
           fi
       - name: Build Release DMG
         env:
-          MACOSX_DEPLOYMENT_TARGET: 26.2
-          CODE_SIGN_IDENTITY: ""
-          CODE_SIGNING_REQUIRED: NO
           CODE_SIGNING_ALLOWED: NO
         run: bash build-release.sh
       - name: Upload DMG
