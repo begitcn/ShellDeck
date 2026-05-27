@@ -12,10 +12,14 @@ jobs:
       - uses: actions/checkout@v4
       - name: Select Xcode
         run: |
-          XCODE_PATH=$(ls /Applications/Xcode*.app 2>/dev/null | sort -V | tail -1)
-          if [ -n "$XCODE_PATH" ]; then
-            sudo xcode-select -s "$XCODE_PATH"
-          fi
+          # Find first valid Xcode path (no trailing newline issues)
+          for xcode in /Applications/Xcode*.app; do
+            if [ -d "$xcode" ]; then
+              sudo xcode-select -s "$xcode"
+              echo "Selected Xcode: $xcode"
+              break
+            fi
+          done
       - name: Verify version consistency
         run: |
           TAG_VERSION="${GITHUB_REF_NAME#v}"
