@@ -147,7 +147,7 @@ echo "   DMG created: $DMG_PATH"
 # ============================================================
 # Step 4: Cleanup
 # ============================================================
-rm -rf "$EXPORT_DIR" "$ARCHIVE_PATH"
+rm -rf "${EXPORT_DIR:-}" "$ARCHIVE_PATH" 2>/dev/null || true
 
 echo ""
 echo "Done!"
