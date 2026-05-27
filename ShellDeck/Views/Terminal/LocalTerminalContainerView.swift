@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftTerm
+import Darwin
 
 private final class FocusableLocalTerminalView: LocalProcessTerminalView {
     override func viewDidMoveToWindow() {
@@ -25,11 +26,19 @@ struct LocalTerminalContainerView: NSViewRepresentable {
         context.coordinator.isRunningBinding = $isRunning
         terminal.configureNativeColors()
         terminal.startProcess(executable: "/bin/zsh")
+
+        // Fix: set process group and foreground pgrp from parent
+        // forkpty()'s login_tty() may fail on macOS, leaving zsh without controlling terminal
+        if terminal.process.shellPid > 0 {
+            setpgid(terminal.process.shellPid, terminal.process.shellPid)
+            tcsetpgrp(terminal.process.childfd, terminal.process.shellPid)
+        }
+
         return terminal
     }
 
     func updateNSView(_ nsView: LocalProcessTerminalView, context: Context) {
-        // No-op: session is immutable once created
+        // No-op once created
     }
 
     static func dismantleNSView(_ nsView: LocalProcessTerminalView, coordinator: Coordinator) {
