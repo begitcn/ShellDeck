@@ -13,6 +13,26 @@ struct FileListView: View {
     @State private var itemToDelete: SFTPItem?
     @State private var loadToken = UUID()
     @State private var lastTapTime: Date?
+    
+    @State private var hoveredItem: SFTPItem.ID? = nil
+    @State private var isEditingPath = false
+
+    struct BreadcrumbItem: Identifiable {
+        let id = UUID()
+        let name: String
+        let fullPath: String
+    }
+
+    private func breadcrumbs(from path: String) -> [BreadcrumbItem] {
+        var breadcrumbs = [BreadcrumbItem(name: "/", fullPath: "/")]
+        let parts = path.split(separator: "/").map(String.init)
+        var current = ""
+        for part in parts {
+            current += "/" + part
+            breadcrumbs.append(BreadcrumbItem(name: part, fullPath: current))
+        }
+        return breadcrumbs
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -62,37 +82,95 @@ struct FileListView: View {
 
     @ViewBuilder
     private var toolbar: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 10) {
             Button(action: goUp) {
-                Image(systemName: "arrow.up")
+                Image(systemName: "chevron.left")
+                    .fontWeight(.semibold)
             }
+            .buttonStyle(.plain)
             .disabled(currentPath == "/")
+            .foregroundStyle(currentPath == "/" ? .tertiary : .primary)
             .help("返回上一级")
 
-            TextField("路径", text: $currentPath)
-                .textFieldStyle(.roundedBorder)
-                .font(.body.monospaced())
-                .onSubmit {
-                    Task { await loadDirectory() }
+            if isEditingPath {
+                TextField("路径", text: $currentPath)
+                    .textFieldStyle(.roundedBorder)
+                    .font(.body.monospaced())
+                    .onSubmit {
+                        isEditingPath = false
+                        Task { await loadDirectory() }
+                    }
+            } else {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 4) {
+                        ForEach(breadcrumbs(from: currentPath)) { item in
+                            Button(action: {
+                                currentPath = item.fullPath
+                                Task { await loadDirectory() }
+                            }) {
+                                Text(item.name)
+                                    .font(.body.monospaced())
+                                    .foregroundStyle(item.fullPath == currentPath ? .primary : Color.accentColor)
+                                    .fontWeight(item.fullPath == currentPath ? .semibold : .regular)
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 3)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 4)
+                                            .fill(item.fullPath == currentPath ? Color.primary.opacity(0.06) : Color.clear)
+                                    )
+                            }
+                            .buttonStyle(.plain)
+                            
+                            if item.fullPath != currentPath {
+                                Image(systemName: "chevron.right")
+                                    .font(.caption2)
+                                    .foregroundStyle(.tertiary)
+                            }
+                        }
+                    }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+                .onTapGesture(count: 2) {
+                    isEditingPath = true
+                }
+            }
+            
+            Button(action: { isEditingPath.toggle() }) {
+                Image(systemName: isEditingPath ? "folder" : "pencil")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            .help(isEditingPath ? "显示面包屑导航" : "直接编辑路径文本")
 
             if isLoading {
                 ProgressView()
                     .controlSize(.small)
-                    .scaleEffect(0.7)
             }
 
             Button(action: { Task { await loadDirectory() } }) {
                 Image(systemName: "arrow.clockwise")
             }
+            .buttonStyle(.plain)
             .help("刷新")
 
             Button(action: uploadFile) {
-                Image(systemName: "arrow.up.doc")
+                Image(systemName: "plus")
+                    .fontWeight(.semibold)
+                Text("上传")
+                    .font(.caption)
             }
-            .help("上传文件")
+            .buttonStyle(.plain)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(Color.accentColor.opacity(0.1))
+            .clipShape(RoundedRectangle(cornerRadius: 6))
+            .foregroundStyle(Color.accentColor)
+            .help("上传文件到当前目录")
         }
         .padding(8)
+        .background(Color(nsColor: .windowBackgroundColor).opacity(0.4))
     }
 
     // MARK: - Content
@@ -122,31 +200,42 @@ struct FileListView: View {
     private func rowView(item: SFTPItem, index: Int) -> some View {
         let isSelected = selectedItem == item.id
         return HStack(spacing: 8) {
-            Image(systemName: item.isDirectory ? "folder" : "doc")
-                .foregroundStyle(item.isDirectory ? .blue : .secondary)
+            Image(systemName: item.isDirectory ? "folder.fill" : "doc.text")
+                .foregroundStyle(item.isDirectory ? Color.accentColor : .secondary)
                 .frame(width: 20)
 
             Text(item.name)
+                .font(.body)
+                .fontWeight(item.isDirectory ? .medium : .regular)
                 .lineLimit(1)
 
             Spacer()
 
             Text(item.isDirectory ? "—" : formattedSize(item.size))
+                .font(.body.monospacedDigit())
                 .foregroundStyle(.secondary)
                 .frame(width: 80, alignment: .trailing)
 
             Text(item.modificationTime.map(formattedDate) ?? "—")
+                .font(.body)
                 .foregroundStyle(.secondary)
                 .frame(width: 160, alignment: .leading)
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 3)
-        .background(alignment: .leading) {
-            RoundedRectangle(cornerRadius: 4)
-                .fill(isSelected ? Color.accentColor.opacity(0.3) : (index % 2 == 1 ? Color(nsColor: .alternatingContentBackgroundColors.last ?? .controlBackgroundColor).opacity(0.5) : Color.clear))
-                .padding(.leading, 4)
-        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 5)
+        .background(
+            RoundedRectangle(cornerRadius: 6)
+                .fill(isSelected ? Color.accentColor.opacity(0.15) : (hoveredItem == item.id ? Color.primary.opacity(0.05) : (index % 2 == 1 ? Color.primary.opacity(0.015) : Color.clear)))
+                .padding(.horizontal, 2)
+        )
         .contentShape(Rectangle())
+        .onHover { isHovered in
+            if isHovered {
+                hoveredItem = item.id
+            } else if hoveredItem == item.id {
+                hoveredItem = nil
+            }
+        }
         .onTapGesture {
             handleTap(item: item)
         }

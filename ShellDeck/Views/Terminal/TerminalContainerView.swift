@@ -5,15 +5,21 @@ private final class FocusableTerminalView: TerminalView {
     private var lastUsableFrameSize: NSSize?
 
     override func setFrameSize(_ newSize: NSSize) {
-        if terminal != nil, isCollapsed(newSize), lastUsableFrameSize != nil {
-            return
+        if isCollapsed(newSize) {
+            if lastUsableFrameSize != nil {
+                return
+            } else {
+                // Initial layout or tab switch before frame is resolved:
+                // set to a sensible default size instead of a collapsed tiny size
+                let defaultSize = NSSize(width: 800, height: 600)
+                super.setFrameSize(defaultSize)
+                lastUsableFrameSize = defaultSize
+                return
+            }
         }
 
         super.setFrameSize(newSize)
-
-        if !isCollapsed(newSize) {
-            lastUsableFrameSize = newSize
-        }
+        lastUsableFrameSize = newSize
     }
 
     override func viewDidMoveToWindow() {
@@ -24,7 +30,7 @@ private final class FocusableTerminalView: TerminalView {
     }
 
     private func isCollapsed(_ size: NSSize) -> Bool {
-        size.width < 32 || size.height < 24
+        size.width < 100 || size.height < 80
     }
 }
 
@@ -66,12 +72,24 @@ extension TerminalContainerView {
     final class Coordinator: TerminalViewDelegate {
         private(set) var viewModel: TerminalViewModel?
         private var lastStableSize: (cols: Int, rows: Int)?
+        private var isOutputConnected = false
 
         func connect(viewModel: TerminalViewModel, terminal: TerminalView) {
             self.viewModel = viewModel
-            viewModel.onOutput = { [weak terminal] bytes in
-                terminal?.feed(byteArray: bytes)
+            
+            let cols = terminal.terminal.cols
+            let rows = terminal.terminal.rows
+            if cols >= 15 && rows >= 3 {
+                lastStableSize = (cols, rows)
+                isOutputConnected = true
+                viewModel.onOutput = { [weak terminal] bytes in
+                    terminal?.feed(byteArray: bytes)
+                }
+                viewModel.changeTerminalSize(cols: cols, rows: rows)
+            } else {
+                isOutputConnected = false
             }
+            
             scheduleDisplayRefresh(for: terminal)
         }
 
@@ -82,7 +100,7 @@ extension TerminalContainerView {
         }
 
         func sizeChanged(source: TerminalView, newCols: Int, newRows: Int) {
-            guard newCols > 1, newRows > 1 else {
+            guard newCols >= 15, newRows >= 3 else {
                 if let stable = lastStableSize {
                     DispatchQueue.main.async { [weak source] in
                         source?.resize(cols: stable.cols, rows: stable.rows)
@@ -92,6 +110,13 @@ extension TerminalContainerView {
             }
             lastStableSize = (newCols, newRows)
             viewModel?.changeTerminalSize(cols: newCols, rows: newRows)
+
+            if !isOutputConnected {
+                isOutputConnected = true
+                viewModel?.onOutput = { [weak source] bytes in
+                    source?.feed(byteArray: bytes)
+                }
+            }
         }
 
         func scheduleDisplayRefresh(for terminal: TerminalView) {

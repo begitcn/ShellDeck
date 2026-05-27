@@ -33,6 +33,17 @@ final class ServerConnection {
     init(server: Server) {
         self.serverID = server.id
         self.serverName = server.displayName.isEmpty ? server.host : server.displayName
+        
+        setupCallbacks()
+    }
+
+    private func setupCallbacks() {
+        terminalViewModel.onDisconnect = { [weak self] in
+            guard let self else { return }
+            Task {
+                await self.disconnect()
+            }
+        }
     }
 
     func connect(to server: Server) async {

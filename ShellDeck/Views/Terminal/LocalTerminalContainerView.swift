@@ -6,15 +6,21 @@ private final class FocusableLocalTerminalView: LocalProcessTerminalView {
     private var lastUsableFrameSize: NSSize?
 
     override func setFrameSize(_ newSize: NSSize) {
-        if terminal != nil, isCollapsed(newSize), lastUsableFrameSize != nil {
-            return
+        if isCollapsed(newSize) {
+            if lastUsableFrameSize != nil {
+                return
+            } else {
+                // Initial layout or tab switch before frame is resolved:
+                // set to a sensible default size instead of a collapsed tiny size
+                let defaultSize = NSSize(width: 800, height: 600)
+                super.setFrameSize(defaultSize)
+                lastUsableFrameSize = defaultSize
+                return
+            }
         }
 
         super.setFrameSize(newSize)
-
-        if !isCollapsed(newSize) {
-            lastUsableFrameSize = newSize
-        }
+        lastUsableFrameSize = newSize
     }
 
     override func viewDidMoveToWindow() {
@@ -25,13 +31,15 @@ private final class FocusableLocalTerminalView: LocalProcessTerminalView {
     }
 
     private func isCollapsed(_ size: NSSize) -> Bool {
-        size.width < 32 || size.height < 24
+        size.width < 100 || size.height < 80
     }
 }
 
 struct LocalTerminalContainerView: NSViewRepresentable {
+    @Environment(LocalTerminalManager.self) var manager
     let session: LocalTerminalSession
     @Binding var isRunning: Bool
+    let isActive: Bool
 
     func makeCoordinator() -> Coordinator {
         Coordinator()
@@ -42,7 +50,18 @@ struct LocalTerminalContainerView: NSViewRepresentable {
         terminal.processDelegate = context.coordinator
         context.coordinator.session = session
         context.coordinator.isRunningBinding = $isRunning
+        context.coordinator.onProcessTerminated = { [manager, sessionID = session.id] in
+            withAnimation {
+                manager.closeSession(id: sessionID)
+            }
+        }
         TerminalAppearance.apply(to: terminal)
+
+        // Set running state immediately on process start
+        DispatchQueue.main.async {
+            session.isRunning = true
+            isRunning = true
+        }
 
         let shell = LocalShellResolver.defaultLoginShell()
         terminal.startProcess(
@@ -55,7 +74,11 @@ struct LocalTerminalContainerView: NSViewRepresentable {
     }
 
     func updateNSView(_ nsView: LocalProcessTerminalView, context: Context) {
-        // No-op once created
+        if isActive, let window = nsView.window, window.firstResponder != nsView {
+            DispatchQueue.main.async {
+                window.makeFirstResponder(nsView)
+            }
+        }
     }
 
     static func dismantleNSView(_ nsView: LocalProcessTerminalView, coordinator: Coordinator) {
@@ -86,6 +109,24 @@ private enum LocalShellResolver {
         var environment = inherited.filter { key, _ in
             preservedEnvironmentKeys.contains(key)
                 || key.hasPrefix("LC_")
+        }
+
+        if environment["LANG"] == nil {
+            if let preferredLang = Locale.preferredLanguages.first {
+                if preferredLang.hasPrefix("zh-Hant") {
+                    environment["LANG"] = "zh_TW.UTF-8"
+                } else if preferredLang.hasPrefix("zh") {
+                    environment["LANG"] = "zh_CN.UTF-8"
+                } else if preferredLang.hasPrefix("ja") {
+                    environment["LANG"] = "ja_JP.UTF-8"
+                } else if preferredLang.hasPrefix("ko") {
+                    environment["LANG"] = "ko_KR.UTF-8"
+                } else {
+                    environment["LANG"] = "en_US.UTF-8"
+                }
+            } else {
+                environment["LANG"] = "en_US.UTF-8"
+            }
         }
 
         environment["SHELL"] = shell
@@ -123,11 +164,13 @@ extension LocalTerminalContainerView {
     final class Coordinator: LocalProcessTerminalViewDelegate {
         var session: LocalTerminalSession?
         var isRunningBinding: Binding<Bool>?
+        var onProcessTerminated: (() -> Void)?
 
         func processTerminated(source: TerminalView, exitCode: Int32?) {
             Task { @MainActor in
                 session?.isRunning = false
                 isRunningBinding?.wrappedValue = false
+                onProcessTerminated?()
             }
         }
 
@@ -135,7 +178,10 @@ extension LocalTerminalContainerView {
 
         func setTerminalTitle(source: LocalProcessTerminalView, title: String) {
             Task { @MainActor in
-                session?.title = title
+                guard let session = session else { return }
+                if !session.isCustomTitle {
+                    session.title = title
+                }
             }
         }
 

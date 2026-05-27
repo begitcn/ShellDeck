@@ -31,32 +31,47 @@ final class MonitorService {
         stopMonitoring()
 
         monitoringTask = Task { [weak self] in
-            guard let self else { return }
-
             while !Task.isCancelled {
                 do {
-                    try await pollDisk()
+                    if let self = self {
+                        try await self.pollDisk()
+                    } else {
+                        break
+                    }
                 } catch {
                     print("[ShellDeck] Disk poll error: \(error)")
                 }
 
                 do {
-                    let mem = try await pollMemory()
-                    memoryHistory.append(MetricPoint(time: Date(), value: mem))
-                    trimHistory(&memoryHistory)
+                    if let self = self {
+                        let mem = try await self.pollMemory()
+                        self.memoryHistory.append(MetricPoint(time: Date(), value: mem))
+                        self.trimHistory(&self.memoryHistory)
+                    } else {
+                        break
+                    }
                 } catch {
                     print("[ShellDeck] Memory poll error: \(error)")
                 }
 
                 do {
-                    let cpu = try await pollCPU()
-                    cpuHistory.append(MetricPoint(time: Date(), value: cpu))
-                    trimHistory(&cpuHistory)
+                    if let self = self {
+                        let cpu = try await self.pollCPU()
+                        self.cpuHistory.append(MetricPoint(time: Date(), value: cpu))
+                        self.trimHistory(&self.cpuHistory)
+                    } else {
+                        break
+                    }
                 } catch {
                     print("[ShellDeck] CPU poll error: \(error)")
                 }
 
-                try? await Task.sleep(nanoseconds: pollInterval)
+                guard let pollInterval = self?.pollInterval else { break }
+                do {
+                    try await Task.sleep(nanoseconds: pollInterval)
+                } catch {
+                    break
+                }
             }
         }
     }

@@ -18,6 +18,11 @@ final class TerminalViewModel {
     private let maxBufferedBytes = 256 * 1024
     @ObservationIgnored
     private var lastWindowSize: (cols: Int, rows: Int)?
+    @ObservationIgnored
+    private var resizeTask: Task<Void, Never>?
+
+    @ObservationIgnored
+    var onDisconnect: (@MainActor () -> Void)?
 
     var onOutput: ((ArraySlice<UInt8>) -> Void)? {
         didSet {
@@ -71,6 +76,7 @@ final class TerminalViewModel {
             await MainActor.run {
                 guard let self, self.sessionToken == token else { return }
                 self.isConnected = false
+                self.onDisconnect?()
             }
         }
     }
@@ -88,16 +94,40 @@ final class TerminalViewModel {
         stdinWriter = nil
         isConnected = false
         lastWindowSize = nil
+        resizeTask?.cancel()
+        resizeTask = nil
         sessionToken = UUID()
     }
 
     func changeTerminalSize(cols: Int, rows: Int) {
-        guard cols > 1, rows > 1 else { return }
+        guard cols >= 15, rows >= 3 else { return }
         guard lastWindowSize?.cols != cols || lastWindowSize?.rows != rows else { return }
+        
+        let isFirstSize = lastWindowSize == nil
         lastWindowSize = (cols, rows)
 
-        Task { [writer = stdinWriter] in
-            try? await writer?.changeSize(cols: cols, rows: rows, pixelWidth: 0, pixelHeight: 0)
+        if isFirstSize {
+            resizeTask?.cancel()
+            resizeTask = nil
+            Task { [writer = stdinWriter] in
+                try? await writer?.changeSize(cols: cols, rows: rows, pixelWidth: 0, pixelHeight: 0)
+            }
+        } else {
+            resizeTask?.cancel()
+            resizeTask = Task { [weak self, writer = stdinWriter] in
+                do {
+                    // Debounce for 100ms to allow SwiftUI layout to settle and filter out transient values
+                    try await Task.sleep(nanoseconds: 100_000_000)
+                    guard !Task.isCancelled else { return }
+                    try? await writer?.changeSize(cols: cols, rows: rows, pixelWidth: 0, pixelHeight: 0)
+                } catch {
+                    // Task cancelled or failed, ignore
+                }
+                await MainActor.run {
+                    guard let self else { return }
+                    self.resizeTask = nil
+                }
+            }
         }
     }
 

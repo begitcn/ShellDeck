@@ -2,8 +2,8 @@ import SwiftUI
 import SwiftData
 
 enum SidebarMode: String, CaseIterable, Identifiable {
-    case ssh = "SSH 服务器"
     case local = "本地终端"
+    case ssh = "SSH 服务器"
 
     var id: String { rawValue }
 
@@ -27,10 +27,16 @@ struct ServerSidebarView: View {
     let onConnect: (Server) -> Void
     let onDisconnect: (Server) -> Void
 
+    @AppStorage("appTheme") private var appTheme: String = AppTheme.system.rawValue
+
     @State private var showAddSheet = false
     @State private var showDeleteConfirmation = false
     @State private var serverToDelete: Server?
     @State private var editingServer: Server?
+
+    @State private var showRenameLocalSheet = false
+    @State private var localSessionToRename: LocalTerminalSession?
+    @State private var renameLocalTitle = ""
 
     @State private var showAddGroupSheet = false
     @State private var newGroupName = ""
@@ -53,6 +59,8 @@ struct ServerSidebarView: View {
             } else {
                 localContent
             }
+            Divider()
+            themeFooterView
         }
         .navigationTitle(sidebarMode == .ssh ? "服务器" : "本地终端")
         .toolbar { toolbarContent }
@@ -60,6 +68,7 @@ struct ServerSidebarView: View {
         .sheet(item: $editingServer) { server in AddServerView(server: server) }
         .sheet(isPresented: $showAddGroupSheet) { addGroupSheet }
         .sheet(isPresented: $showRenameGroupSheet) { renameGroupSheet }
+        .sheet(isPresented: $showRenameLocalSheet) { renameLocalSheet }
         .confirmationDialog("确认删除", isPresented: $showDeleteConfirmation, presenting: serverToDelete)
         { server in
             Button("删除", role: .destructive) { deleteServer(server); if selection?.id == server.id { selection = nil } }
@@ -79,14 +88,15 @@ struct ServerSidebarView: View {
     // MARK: - Mode Picker
 
     private var modePicker: some View {
-        Picker("模式", selection: $sidebarMode) {
+        Picker("", selection: $sidebarMode) {
             ForEach(SidebarMode.allCases) { mode in
                 Label(mode.rawValue, systemImage: mode.icon).tag(mode)
             }
         }
         .pickerStyle(.segmented)
-        .padding(.horizontal, 8)
-        .padding(.vertical, 6)
+        .labelsHidden()
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
     }
 
     // MARK: - SSH Content
@@ -108,26 +118,48 @@ struct ServerSidebarView: View {
     private var localContent: some View {
         List(selection: $localSelection) {
             ForEach(localManager.sessions) { session in
-                HStack(spacing: 8) {
-                    Image(systemName: session.isRunning ? "terminal" : "xmark.circle")
-                        .foregroundStyle(session.isRunning ? .green : .secondary)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(session.title)
-                            .font(.headline)
-                        Text(session.isRunning ? "运行中" : "已退出")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
+                HStack(spacing: 10) {
+                    Image(systemName: "terminal.fill")
+                        .foregroundStyle(.green)
+                        .imageScale(.medium)
+                    
+                    Text(session.title)
+                        .font(.body)
+                        .fontWeight(.medium)
+                        .foregroundStyle(.primary)
+                    
                     Spacer()
+                    
+                    // Trailing close button
+                    Button(action: {
+                        withAnimation {
+                            localManager.closeSession(id: session.id)
+                        }
+                    }) {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(.secondary)
+                            .padding(4)
+                            .background(Color.primary.opacity(0.06))
+                            .clipShape(Circle())
+                    }
+                    .buttonStyle(.borderless)
+                    .help("关闭终端")
                 }
                 .padding(.vertical, 4)
                 .contentShape(Rectangle())
                 .tag(session.id as UUID?)
                 .contextMenu {
-                    Button("重命名") { /* TODO */ }
+                    Button("重命名", systemImage: "pencil") {
+                        localSessionToRename = session
+                        renameLocalTitle = session.title
+                        showRenameLocalSheet = true
+                    }
                     Divider()
                     Button("关闭", role: .destructive) {
-                        localManager.closeSession(id: session.id)
+                        withAnimation {
+                            localManager.closeSession(id: session.id)
+                        }
                     }
                 }
             }
@@ -214,6 +246,7 @@ struct ServerSidebarView: View {
                 } label: { Label("添加", systemImage: "plus") }
             } else {
                 Button { localManager.createSession() } label: { Label("新建终端", systemImage: "plus") }
+                    .keyboardShortcut("t", modifiers: .command)
             }
         }
     }
@@ -305,7 +338,7 @@ struct ServerSidebarView: View {
         guard !name.isEmpty else { return }
         let group = ServerGroup(name: name, sortOrder: groups.count)
         modelContext.insert(group)
-        withAnimation { expandedGroups.insert(group.id) }
+        _ = withAnimation { expandedGroups.insert(group.id) }
         newGroupName = ""
         showAddGroupSheet = false
     }
@@ -375,7 +408,7 @@ struct ServerSidebarView: View {
         case .none, .disconnected:
             Button("连接") { onConnect(server) }.foregroundStyle(.blue)
         case .connecting:
-            ProgressView().controlSize(.small).scaleEffect(0.7)
+            ProgressView().controlSize(.small)
         case .connected:
             Button("断开") { onDisconnect(server) }.foregroundStyle(.red)
         case .failed:
@@ -412,6 +445,67 @@ struct ServerSidebarView: View {
         KeychainHelper.delete(key: server.id.uuidString + ".key")
         KeychainHelper.delete(key: server.id.uuidString + ".passphrase")
         modelContext.delete(server)
+    }
+
+    private var renameLocalSheet: some View {
+        NavigationStack {
+            Form {
+                TextField("终端名称", text: $renameLocalTitle)
+                    .onSubmit {
+                        renameLocalSession()
+                    }
+            }
+            .formStyle(.grouped)
+            .navigationTitle("重命名终端")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("取消") { showRenameLocalSheet = false }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("保存") { renameLocalSession() }
+                        .disabled(renameLocalTitle.trimmingCharacters(in: .whitespaces).isEmpty)
+                }
+            }
+        }
+        .frame(minWidth: 300)
+    }
+
+    private func renameLocalSession() {
+        guard let session = localSessionToRename else { return }
+        let title = renameLocalTitle.trimmingCharacters(in: .whitespaces)
+        guard !title.isEmpty else { return }
+        localManager.renameSession(id: session.id, title: title)
+        showRenameLocalSheet = false
+        localSessionToRename = nil
+    }
+
+    private var themeFooterView: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "paintpalette.fill")
+                .foregroundStyle(.secondary)
+                .imageScale(.medium)
+            
+            Text("外观主题")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            
+            Spacer()
+            
+            Picker("", selection: $appTheme) {
+                ForEach(AppTheme.allCases) { theme in
+                    Image(systemName: theme.icon)
+                        .tag(theme.rawValue)
+                        .help(theme.displayName)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .frame(width: 90)
+            .controlSize(.small)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(.ultraThinMaterial)
     }
 }
 

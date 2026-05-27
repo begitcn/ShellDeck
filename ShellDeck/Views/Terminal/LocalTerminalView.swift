@@ -8,55 +8,63 @@ struct LocalTerminalView: View {
             if manager.sessions.isEmpty {
                 emptyView
             } else {
-                tabView
+                ZStack {
+                    ForEach(manager.sessions) { session in
+                        terminalTab(session: session)
+                            .opacity(session.id == manager.activeSessionID ? 1.0 : 0.0)
+                            .disabled(session.id != manager.activeSessionID)
+                            .allowsHitTesting(session.id == manager.activeSessionID)
+                    }
+                }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background {
+            Button("") {
+                manager.createSession()
+            }
+            .keyboardShortcut("t", modifiers: .command)
+            .opacity(0)
+            .allowsHitTesting(false)
+        }
     }
 
     private var emptyView: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "terminal")
-                .font(.system(size: 48))
-                .foregroundStyle(.secondary)
+        VStack(spacing: 20) {
+            Image(systemName: "terminal.fill")
+                .font(.system(size: 64))
+                .foregroundStyle(.linearGradient(
+                    colors: [.blue, .purple],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                ))
+                .symbolEffect(.bounce, value: manager.sessions.isEmpty)
+            
             Text("没有打开的终端")
                 .font(.title2)
+                .bold()
+                .foregroundStyle(.primary)
+            
+            Text("可以点击左下角或顶部的 + 按钮，或者点击下方按钮新建本地终端。")
+                .font(.body)
                 .foregroundStyle(.secondary)
-            Button("新建终端") {
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 40)
+            
+            Button(action: {
                 manager.createSession()
+            }) {
+                HStack(spacing: 8) {
+                    Image(systemName: "plus.circle.fill")
+                    Text("新建本地终端")
+                }
+                .fontWeight(.semibold)
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.large)
+            .tint(.blue)
         }
-    }
-
-    private var activeSessionBinding: Binding<UUID?> {
-        Binding(
-            get: { manager.activeSessionID },
-            set: { manager.activeSessionID = $0 }
-        )
-    }
-
-    private var tabView: some View {
-        TabView(selection: activeSessionBinding) {
-            ForEach(manager.sessions) { session in
-                terminalTab(session: session)
-                    .tag(session.id as UUID?)
-                    .tabItem {
-                        HStack(spacing: 4) {
-                            Image(systemName: session.isRunning ? "terminal" : "xmark.circle")
-                            Text(session.title)
-                        }
-                    }
-                    .contextMenu {
-                        Button("重命名") { /* TODO: rename sheet */ }
-                        Divider()
-                        Button("关闭", role: .destructive) {
-                            manager.closeSession(id: session.id)
-                        }
-                    }
-            }
-        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private func terminalTab(session: LocalTerminalSession) -> some View {
@@ -65,7 +73,8 @@ struct LocalTerminalView: View {
             isRunning: Binding(
                 get: { session.isRunning },
                 set: { session.isRunning = $0 }
-            )
+            ),
+            isActive: session.id == manager.activeSessionID
         )
     }
 }

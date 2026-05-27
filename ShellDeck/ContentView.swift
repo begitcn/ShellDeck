@@ -10,11 +10,12 @@ struct ContentView: View {
         case info
     }
 
+    @Query(sort: \Server.displayName) private var servers: [Server]
     @State private var selectedServer: Server?
     @State private var connections: [UUID: ServerConnection] = [:]
     @State private var selectedTabsByServer: [UUID: DetailTab] = [:]
     @State private var filePathsByServer: [UUID: String] = [:]
-    @State private var sidebarMode: SidebarMode = .ssh
+    @State private var sidebarMode: SidebarMode = .local
     @State private var localSelection: UUID?
     @State private var localManager = LocalTerminalManager()
 
@@ -31,15 +32,56 @@ struct ContentView: View {
             )
         } detail: {
             detailView
-                .toolbar {
-                    if sidebarMode == .ssh, let server = selectedServer, connections[server.id]?.state == .connected {
-                        ToolbarItem {
-                            Button("断开连接") { disconnect(server) }
-                        }
-                    }
-                }
+                .navigationTitle(detailTitle)
         }
         .environment(localManager)
+        .onChange(of: localSelection) { _, newValue in
+            if localManager.activeSessionID != newValue {
+                localManager.activeSessionID = newValue
+            }
+        }
+        .onChange(of: localManager.activeSessionID) { _, newValue in
+            if localSelection != newValue {
+                localSelection = newValue
+            }
+        }
+        .onChange(of: sidebarMode) { _, newMode in
+            if newMode == .local {
+                if localSelection == nil {
+                    localSelection = localManager.activeSessionID ?? localManager.sessions.first?.id
+                }
+                if localManager.activeSessionID == nil {
+                    localManager.activeSessionID = localSelection
+                }
+            } else if newMode == .ssh {
+                if selectedServer == nil, let firstServer = servers.first {
+                    selectedServer = firstServer
+                }
+            }
+        }
+        .onChange(of: servers) { _, newServers in
+            if selectedServer == nil, let firstServer = newServers.first {
+                selectedServer = firstServer
+            }
+        }
+        .onAppear {
+            if sidebarMode == .local {
+                localSelection = localManager.activeSessionID ?? localManager.sessions.first?.id
+                localManager.activeSessionID = localSelection
+            } else if selectedServer == nil, let firstServer = servers.first {
+                selectedServer = firstServer
+            }
+        }
+    }
+
+    private var detailTitle: String {
+        if sidebarMode == .local {
+            return localManager.sessions.first(where: { $0.id == localSelection })?.title ?? "本地终端"
+        } else if let server = selectedServer {
+            return server.displayName.isEmpty ? server.host : server.displayName
+        } else {
+            return "ShellDeck"
+        }
     }
 
     private var connectionStates: [UUID: ServerConnection.State] {
@@ -121,39 +163,76 @@ struct ContentView: View {
 
     // MARK: - 已连接
 
+    // MARK: - 已连接
+
     private func connectedView(for conn: ServerConnection, server: Server) -> some View {
-        TabView(selection: selectedTabBinding(for: server.id)) {
-            TerminalContainerView(viewModel: conn.terminalViewModel)
-                .tag(DetailTab.terminal)
-                .tabItem {
-                    Label("终端", systemImage: "terminal")
+        let selectedTab = selectedTabsByServer[server.id] ?? .terminal
+        return Group {
+            switch selectedTab {
+            case .terminal:
+                TerminalContainerView(viewModel: conn.terminalViewModel)
+            case .fileManager:
+                if let sftpService = conn.sftpService {
+                    FileListView(
+                        sftpService: sftpService,
+                        currentPath: filePathBinding(for: server.id)
+                    )
+                } else {
+                    ContentUnavailableView("SFTP 未连接", systemImage: "folder.badge.minus")
                 }
-
-            if let sftpService = conn.sftpService {
-                FileListView(
-                    sftpService: sftpService,
-                    currentPath: filePathBinding(for: server.id)
-                )
-                    .tag(DetailTab.fileManager)
-                    .tabItem {
-                        Label("文件管理", systemImage: "folder")
-                    }
-            }
-
-            if let monitorService = conn.monitorService {
-                SystemMonitorView(monitorService: monitorService)
-                    .tag(DetailTab.monitor)
-                    .tabItem {
-                        Label("系统监控", systemImage: "gauge.medium")
-                    }
-            }
-
-            serverInfoTab(server)
-                .tag(DetailTab.info)
-                .tabItem {
-                    Label("信息", systemImage: "info.circle")
+            case .monitor:
+                if let monitorService = conn.monitorService {
+                    SystemMonitorView(monitorService: monitorService)
+                } else {
+                    ContentUnavailableView("监控服务不可用", systemImage: "gauge.badge.minus")
                 }
+            case .info:
+                serverInfoTab(server)
+            }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .toolbar {
+            ToolbarItem(placement: .principal) {
+                Picker("视图切换", selection: selectedTabBinding(for: server.id)) {
+                    Text("终端").tag(DetailTab.terminal)
+                    if conn.sftpService != nil {
+                        Text("文件管理").tag(DetailTab.fileManager)
+                    }
+                    if conn.monitorService != nil {
+                        Text("系统监控").tag(DetailTab.monitor)
+                    }
+                    Text("信息").tag(DetailTab.info)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+            }
+            
+            ToolbarItem(placement: .primaryAction) {
+                Button(action: { disconnect(server) }) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "power")
+                        Text("断开")
+                    }
+                    .foregroundStyle(.red)
+                }
+                .help("断开与当前服务器的连接")
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func statusDot(for state: ServerConnection.State) -> some View {
+        let color: Color = {
+            switch state {
+            case .disconnected: return .gray
+            case .connecting: return .orange
+            case .connected: return .green
+            case .failed: return .red
+            }
+        }()
+        Image(systemName: "circle.fill")
+            .font(.system(size: 8))
+            .foregroundStyle(color)
     }
 
     // MARK: - 连接失败
@@ -179,18 +258,55 @@ struct ContentView: View {
     // MARK: - 信息 Tab
 
     private func serverInfoTab(_ server: Server) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Group {
-                LabeledContent("名称", value: server.displayName.isEmpty ? "—" : server.displayName)
-                LabeledContent("主机", value: server.host)
-                LabeledContent("端口", value: "\(server.port)")
-                LabeledContent("用户名", value: server.username)
-                LabeledContent("认证方式", value: server.authTypeEnum.displayName)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                VStack(alignment: .leading, spacing: 16) {
+                    Text("服务器配置信息")
+                        .font(.headline)
+                        .padding(.bottom, 4)
+                    
+                    VStack(spacing: 12) {
+                        infoRow(label: "显示名称", value: server.displayName.isEmpty ? "—" : server.displayName, icon: "tag")
+                        Divider()
+                        infoRow(label: "主机名 / IP", value: server.host, icon: "network")
+                        Divider()
+                        infoRow(label: "端口", value: "\(server.port)", icon: "number")
+                        Divider()
+                        infoRow(label: "登录用户", value: server.username, icon: "person")
+                        Divider()
+                        infoRow(label: "认证方式", value: server.authTypeEnum.displayName, icon: "lock")
+                    }
+                    .padding(16)
+                    .background(Color(nsColor: .controlBackgroundColor).opacity(0.6))
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+                    )
+                }
+                .padding(24)
             }
-            .padding(.horizontal)
         }
-        .tabItem {
-            Label("信息", systemImage: "info.circle")
+    }
+
+    @ViewBuilder
+    private func infoRow(label: String, value: String, icon: String) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .font(.body)
+                .foregroundStyle(.secondary)
+                .frame(width: 20)
+            
+            Text(label)
+                .font(.body)
+                .foregroundStyle(.secondary)
+            
+            Spacer()
+            
+            Text(value)
+                .font(.body)
+                .fontWeight(.medium)
+                .foregroundStyle(.primary)
         }
     }
 
@@ -224,6 +340,34 @@ struct ContentView: View {
             get: { filePathsByServer[serverID] ?? "/" },
             set: { filePathsByServer[serverID] = $0 }
         )
+    }
+}
+
+// MARK: - Supporting Views
+
+struct PulsatingDot: View {
+    let color: Color
+    @State private var scale: CGFloat = 1.0
+    
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(color.opacity(0.3))
+                .frame(width: 14, height: 14)
+                .scaleEffect(scale)
+                .onAppear {
+                    withAnimation(
+                        .easeInOut(duration: 1.2)
+                        .repeatForever(autoreverses: true)
+                    ) {
+                        scale = 1.6
+                    }
+                }
+            
+            Circle()
+                .fill(color)
+                .frame(width: 8, height: 8)
+        }
     }
 }
 

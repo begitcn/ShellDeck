@@ -6,14 +6,14 @@ struct SystemMonitorView: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 16) {
-                HStack(spacing: 16) {
+            VStack(spacing: 20) {
+                HStack(spacing: 20) {
                     cpuCard
                     memoryCard
                 }
                 diskCard
             }
-            .padding()
+            .padding(20)
         }
         .background(Color(nsColor: .windowBackgroundColor))
     }
@@ -21,16 +21,17 @@ struct SystemMonitorView: View {
     // MARK: - CPU
 
     private var cpuCard: some View {
-        GroupBox {
-            VStack(alignment: .leading, spacing: 12) {
-                Label {
-                    Text("CPU 占用率")
-                        .font(.headline)
-                } icon: {
-                    Image(systemName: "cpu")
-                        .foregroundStyle(.blue)
-                }
-
+        let current = currentCPU
+        let maxVal = maxCPU
+        let themeColor: Color = current > 80 ? .red : (current > 60 ? .orange : .blue)
+        let gradient = LinearGradient(
+            gradient: Gradient(colors: [themeColor.opacity(0.3), themeColor.opacity(0.0)]),
+            startPoint: .top,
+            endPoint: .bottom
+        )
+        
+        return MonitorCard(title: "CPU 占用率", icon: "cpu", iconColor: themeColor) {
+            VStack(alignment: .leading, spacing: 14) {
                 if monitorService.cpuHistory.isEmpty {
                     emptyState("等待数据…")
                 } else {
@@ -40,66 +41,83 @@ struct SystemMonitorView: View {
                                 x: .value("时间", point.time),
                                 y: .value("占用率", point.value)
                             )
-                            .foregroundStyle(.blue.opacity(0.15))
+                            .foregroundStyle(gradient)
                             .interpolationMethod(.monotone)
 
                             LineMark(
                                 x: .value("时间", point.time),
                                 y: .value("占用率", point.value)
                             )
-                            .foregroundStyle(.blue)
+                            .foregroundStyle(themeColor)
+                            .lineStyle(StrokeStyle(lineWidth: 2.5, lineCap: .round))
                             .interpolationMethod(.monotone)
                         }
                     }
                     .chartYScale(domain: 0...100)
                     .chartYAxis {
                         AxisMarks(values: [0, 25, 50, 75, 100]) { value in
-                            AxisGridLine()
-                            AxisTick()
+                            AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5, dash: [2, 2]))
+                                .foregroundStyle(Color.primary.opacity(0.1))
                             AxisValueLabel("\(value.as(Int.self)!)%")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
                         }
                     }
                     .chartXAxis {
-                        AxisMarks(values: .stride(by: .second, count: 5)) { _ in
-                            AxisGridLine()
-                            AxisTick()
-                            AxisValueLabel(format: Date.FormatStyle(time: .shortened))
+                        AxisMarks { _ in
+                            AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
+                                .foregroundStyle(Color.primary.opacity(0.06))
+                            AxisValueLabel(format: .dateTime.minute().second())
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
                         }
                     }
-                    .frame(height: 180)
+                    .frame(height: 160)
 
-                    HStack {
-                        Text("当前")
-                            .foregroundStyle(.secondary)
-                        Text("\(Int(currentCPU))%")
-                            .font(.title3)
-                            .fontWeight(.semibold)
-                            .monospacedDigit()
-                            .foregroundStyle(currentCPU > 80 ? .red : .blue)
+                    HStack(spacing: 12) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("当前")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                            Text("\(Int(current))%")
+                                .font(.title2)
+                                .fontWeight(.bold)
+                                .monospacedDigit()
+                                .foregroundStyle(themeColor)
+                        }
+                        
                         Spacer()
-                        Text("历史最高: \(Int(maxCPU))%")
-                            .foregroundStyle(.secondary)
+                        
+                        VStack(alignment: .trailing, spacing: 2) {
+                            Text("历史最高")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                            Text("\(Int(maxVal))%")
+                                .font(.headline)
+                                .fontWeight(.semibold)
+                                .monospacedDigit()
+                                .foregroundStyle(.secondary)
+                        }
                     }
-                    .font(.caption)
                 }
             }
-            .padding()
         }
     }
 
     // MARK: - Memory
 
     private var memoryCard: some View {
-        GroupBox {
-            VStack(alignment: .leading, spacing: 12) {
-                Label {
-                    Text("内存占用率")
-                        .font(.headline)
-                } icon: {
-                    Image(systemName: "memorychip")
-                        .foregroundStyle(.green)
-                }
-
+        let current = currentMemory
+        let maxVal = maxMemory
+        let themeColor: Color = current > 80 ? .red : (current > 60 ? .orange : .green)
+        let gradient = LinearGradient(
+            gradient: Gradient(colors: [themeColor.opacity(0.3), themeColor.opacity(0.0)]),
+            startPoint: .top,
+            endPoint: .bottom
+        )
+        
+        return MonitorCard(title: "内存占用率", icon: "memorychip", iconColor: themeColor) {
+            VStack(alignment: .leading, spacing: 14) {
                 if monitorService.memoryHistory.isEmpty {
                     emptyState("等待数据…")
                 } else {
@@ -109,115 +127,147 @@ struct SystemMonitorView: View {
                                 x: .value("时间", point.time),
                                 y: .value("占用率", point.value)
                             )
-                            .foregroundStyle(.green.opacity(0.15))
+                            .foregroundStyle(gradient)
                             .interpolationMethod(.monotone)
 
                             LineMark(
                                 x: .value("时间", point.time),
                                 y: .value("占用率", point.value)
                             )
-                            .foregroundStyle(.green)
+                            .foregroundStyle(themeColor)
+                            .lineStyle(StrokeStyle(lineWidth: 2.5, lineCap: .round))
                             .interpolationMethod(.monotone)
                         }
                     }
                     .chartYScale(domain: 0...100)
                     .chartYAxis {
                         AxisMarks(values: [0, 25, 50, 75, 100]) { value in
-                            AxisGridLine()
-                            AxisTick()
+                            AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5, dash: [2, 2]))
+                                .foregroundStyle(Color.primary.opacity(0.1))
                             AxisValueLabel("\(value.as(Int.self)!)%")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
                         }
                     }
                     .chartXAxis {
-                        AxisMarks(values: .stride(by: .second, count: 5)) { _ in
-                            AxisGridLine()
-                            AxisTick()
-                            AxisValueLabel(format: Date.FormatStyle(time: .shortened))
+                        AxisMarks { _ in
+                            AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
+                                .foregroundStyle(Color.primary.opacity(0.06))
+                            AxisValueLabel(format: .dateTime.minute().second())
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
                         }
                     }
-                    .frame(height: 180)
+                    .frame(height: 160)
 
-                    HStack {
-                        Text("当前")
-                            .foregroundStyle(.secondary)
-                        Text("\(Int(currentMemory))%")
-                            .font(.title3)
-                            .fontWeight(.semibold)
-                            .monospacedDigit()
-                            .foregroundStyle(currentMemory > 80 ? .red : .green)
+                    HStack(spacing: 12) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("当前")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                            Text("\(Int(current))%")
+                                .font(.title2)
+                                .fontWeight(.bold)
+                                .monospacedDigit()
+                                .foregroundStyle(themeColor)
+                        }
+                        
                         Spacer()
-                        Text("历史最高: \(Int(maxMemory))%")
-                            .foregroundStyle(.secondary)
+                        
+                        VStack(alignment: .trailing, spacing: 2) {
+                            Text("历史最高")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                            Text("\(Int(maxVal))%")
+                                .font(.headline)
+                                .fontWeight(.semibold)
+                                .monospacedDigit()
+                                .foregroundStyle(.secondary)
+                        }
                     }
-                    .font(.caption)
                 }
             }
-            .padding()
         }
     }
 
     // MARK: - Disk
 
     private var diskCard: some View {
-        GroupBox {
+        let percent = diskPercent
+        let themeColor: Color = percent > 85 ? .red : (percent > 70 ? .orange : .accentColor)
+        
+        return MonitorCard(title: "存储磁盘空间", icon: "internaldrive", iconColor: themeColor) {
             VStack(alignment: .leading, spacing: 16) {
-                Label {
-                    Text("磁盘占用")
-                        .font(.headline)
-                } icon: {
-                    Image(systemName: "internaldrive")
-                        .foregroundStyle(.orange)
-                }
-
                 if monitorService.diskTotal <= 0 {
                     emptyState("等待数据…")
                         .frame(maxWidth: .infinity)
                 } else {
-                    HStack(spacing: 32) {
-                        diskRing
-                            .frame(width: 120, height: 120)
+                    HStack(spacing: 40) {
+                        diskRing(themeColor: themeColor)
+                            .frame(width: 140, height: 140)
+                            .padding(.vertical, 8)
 
-                        VStack(alignment: .leading, spacing: 10) {
-                            detailRow(label: "总容量", value: "\(diskTotalStr) GB", color: .secondary)
-                            detailRow(label: "已用", value: "\(diskUsedStr) GB", color: .orange)
-                            detailRow(label: "可用", value: "\(diskFreeStr) GB", color: .green)
-                            detailRow(label: "占用率", value: "\(Int(diskPercent))%", color: .orange)
+                        VStack(spacing: 12) {
+                            diskDetailRow(label: "总容量", value: "\(diskTotalStr) GB", icon: "square.grid.3x3.fill", color: .secondary)
+                            Divider()
+                            diskDetailRow(label: "已使用", value: "\(diskUsedStr) GB", icon: "chart.pie.fill", color: themeColor)
+                            Divider()
+                            diskDetailRow(label: "剩余可用", value: "\(diskFreeStr) GB", icon: "square.dashed", color: .green)
                         }
+                        .padding(16)
+                        .background(Color.primary.opacity(0.02))
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(Color.primary.opacity(0.06), lineWidth: 0.5)
+                        )
                     }
                 }
             }
-            .padding()
         }
     }
 
     // MARK: - Disk Ring
 
-    private var diskRing: some View {
+    private func diskRing(themeColor: Color) -> some View {
         ZStack {
             Circle()
-                .stroke(Color(nsColor: .controlBackgroundColor), lineWidth: 12)
+                .stroke(Color.primary.opacity(0.06), lineWidth: 14)
+
+            // Dynamic glow shadow ring
+            Circle()
+                .trim(from: 0, to: diskPercent / 100.0)
+                .stroke(
+                    themeColor.opacity(0.3),
+                    style: StrokeStyle(lineWidth: 18, lineCap: .round)
+                )
+                .rotationEffect(.degrees(-90))
+                .blur(radius: 5)
+                .animation(.easeInOut(duration: 0.5), value: diskPercent)
 
             Circle()
                 .trim(from: 0, to: diskPercent / 100.0)
                 .stroke(
                     AngularGradient(
-                        colors: [.orange, .yellow, .orange],
+                        colors: [themeColor, themeColor.opacity(0.7), themeColor],
                         center: .center,
                         startAngle: .degrees(-90),
                         endAngle: .degrees(270)
                     ),
-                    style: StrokeStyle(lineWidth: 12, lineCap: .round)
+                    style: StrokeStyle(lineWidth: 14, lineCap: .round)
                 )
                 .rotationEffect(.degrees(-90))
                 .animation(.easeInOut(duration: 0.5), value: diskPercent)
 
             VStack(spacing: 2) {
                 Text("\(Int(diskPercent))%")
-                    .font(.title2)
+                    .font(.title)
                     .fontWeight(.bold)
                     .monospacedDigit()
-                Text("已用")
+                    .foregroundStyle(themeColor)
+                Text("已使用")
                     .font(.caption2)
+                    .fontWeight(.semibold)
                     .foregroundStyle(.secondary)
             }
         }
@@ -255,36 +305,84 @@ struct SystemMonitorView: View {
     }
 
     private var diskFreeStr: String {
-        String(format: "%.1f", monitorService.diskTotal - monitorService.diskUsed)
+        String(format: "%.1f", max(0.0, monitorService.diskTotal - monitorService.diskUsed))
     }
 
     private func emptyState(_ text: String) -> some View {
-        VStack(spacing: 8) {
-            Image(systemName: "clock")
-                .font(.title2)
-                .foregroundStyle(.secondary)
+        VStack(spacing: 10) {
+            ProgressView()
+                .controlSize(.small)
             Text(text)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
         }
-        .padding(.vertical, 40)
+        .padding(.vertical, 50)
         .frame(maxWidth: .infinity)
     }
 
-    private func detailRow(label: String, value: String, color: Color) -> some View {
-        HStack {
-            Text(label)
-                .foregroundStyle(.secondary)
-                .frame(width: 60, alignment: .leading)
-            Text(value)
-                .fontWeight(.medium)
-                .monospacedDigit()
+    private func diskDetailRow(label: String, value: String, icon: String, color: Color) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .font(.body)
                 .foregroundStyle(color)
+                .frame(width: 18)
+            
+            Text(label)
+                .font(.body)
+                .foregroundStyle(.secondary)
+            
+            Spacer()
+            
+            Text(value)
+                .font(.body)
+                .fontWeight(.bold)
+                .monospacedDigit()
+                .foregroundStyle(.primary)
         }
+    }
+}
+
+// MARK: - Monitor Card Container
+
+struct MonitorCard<Content: View>: View {
+    let title: String
+    let icon: String
+    let iconColor: Color
+    let content: Content
+
+    init(title: String, icon: String, iconColor: Color = .accentColor, @ViewBuilder content: () -> Content) {
+        self.title = title
+        self.icon = icon
+        self.iconColor = iconColor
+        self.content = content()
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 8) {
+                Image(systemName: icon)
+                    .font(.headline)
+                    .foregroundStyle(iconColor)
+                Text(title)
+                    .font(.headline)
+                    .fontWeight(.bold)
+                Spacer()
+            }
+            
+            content
+        }
+        .padding(20)
+        .background(.ultraThinMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(Color.white.opacity(0.12), lineWidth: 1)
+        )
+        .shadow(color: Color.black.opacity(0.08), radius: 8, x: 0, y: 4)
     }
 }
 
 #Preview {
     SystemMonitorView(monitorService: MonitorService())
-        .frame(width: 600, height: 500)
+        .frame(width: 700, height: 600)
 }

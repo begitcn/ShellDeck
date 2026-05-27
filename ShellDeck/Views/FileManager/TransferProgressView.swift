@@ -46,7 +46,7 @@ struct TransferProgressView: View {
                 .padding(.vertical, 6)
                 .background(Color(nsColor: .controlBackgroundColor))
             }
-            .onChange(of: activeTasks.count) { count in
+            .onChange(of: activeTasks.count) { _, count in
                 if count > 0 { isExpanded = true }
             }
         }

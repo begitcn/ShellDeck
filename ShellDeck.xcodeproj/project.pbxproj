@@ -273,6 +273,7 @@
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
+				EXCLUDED_SOURCE_FILE_NAMES = "Info.plist";
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = ShellDeck/App/Info.plist;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
@@ -307,6 +308,7 @@
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
+				EXCLUDED_SOURCE_FILE_NAMES = "Info.plist";
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = ShellDeck/App/Info.plist;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";

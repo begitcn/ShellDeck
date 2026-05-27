@@ -29,7 +29,10 @@ final class LocalTerminalManager {
     }
 
     func renameSession(id: UUID, title: String) {
-        sessions.first { $0.id == id }?.title = title
+        if let session = sessions.first(where: { $0.id == id }) {
+            session.title = title
+            session.isCustomTitle = true
+        }
     }
 
     func terminateAll() {

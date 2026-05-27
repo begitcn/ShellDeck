@@ -1,5 +1,5 @@
 import Foundation
-import Citadel
+@preconcurrency import Citadel
 import CryptoKit
 import CCryptoBoringSSL
 
@@ -242,8 +242,10 @@ enum SSHService {
             if first < 0x80 { return Int(first) }
             let count = Int(first & 0x7F)
             guard offset + count <= der.count else { throw SSHError.invalidPrivateKey }
-            let length = try (0..<count).reduce(0) { acc, _ in
-                (acc << 8) | Int(der[offset]); offset += 1; return acc
+            let length = (0..<count).reduce(0) { acc, _ in
+                let newAcc = (acc << 8) | Int(der[offset])
+                offset += 1
+                return newAcc
             }
             return length
         }
@@ -271,8 +273,10 @@ enum SSHService {
                 len = Int(first)
             } else {
                 let count = Int(first & 0x7F)
-                len = try (0..<count).reduce(0) { acc, _ in
-                    (acc << 8) | Int(outerOctet[inner]); inner += 1; return acc
+                len = (0..<count).reduce(0) { acc, _ in
+                    let newAcc = (acc << 8) | Int(outerOctet[inner])
+                    inner += 1
+                    return newAcc
                 }
             }
             guard inner + len <= outerOctet.count else { throw SSHError.invalidPrivateKey }
@@ -304,8 +308,10 @@ enum SSHService {
             if first < 0x80 { return Int(first) }
             let count = Int(first & 0x7F)
             guard offset + count <= der.count else { throw SSHError.invalidPrivateKey }
-            let length = try (0..<count).reduce(0) { acc, _ in
-                (acc << 8) | Int(der[offset]); offset += 1; return acc
+            let length = (0..<count).reduce(0) { acc, _ in
+                let newAcc = (acc << 8) | Int(der[offset])
+                offset += 1
+                return newAcc
             }
             return length
         }
