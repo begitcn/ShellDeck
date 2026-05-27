@@ -246,7 +246,6 @@ struct ServerSidebarView: View {
                 } label: { Label("添加", systemImage: "plus") }
             } else {
                 Button { localManager.createSession() } label: { Label("新建终端", systemImage: "plus") }
-                    .keyboardShortcut("t", modifiers: .command)
             }
         }
     }

@@ -19,14 +19,6 @@ struct LocalTerminalView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background {
-            Button("") {
-                manager.createSession()
-            }
-            .keyboardShortcut("t", modifiers: .command)
-            .opacity(0)
-            .allowsHitTesting(false)
-        }
     }
 
     private var emptyView: some View {

@@ -18,6 +18,7 @@ struct ContentView: View {
     @State private var sidebarMode: SidebarMode = .local
     @State private var localSelection: UUID?
     @State private var localManager = LocalTerminalManager()
+    private let digits: [Character] = ["1", "2", "3", "4", "5", "6", "7", "8", "9"]
 
     var body: some View {
         NavigationSplitView {
@@ -35,6 +36,37 @@ struct ContentView: View {
                 .navigationTitle(detailTitle)
         }
         .environment(localManager)
+        .background {
+            Button("") {
+                sidebarMode = (sidebarMode == .local) ? .ssh : .local
+            }
+            .keyboardShortcut("`", modifiers: .command)
+            .opacity(0)
+            .allowsHitTesting(false)
+            
+            ForEach(0..<9, id: \.self) { index in
+                Button("") {
+                    selectSidebarItem(at: index)
+                }
+                .keyboardShortcut(KeyEquivalent(digits[index]), modifiers: .command)
+                .opacity(0)
+                .allowsHitTesting(false)
+            }
+
+            Button("") {
+                openFileManagerTab()
+            }
+            .keyboardShortcut("f", modifiers: .command)
+            .opacity(0)
+            .allowsHitTesting(false)
+
+            Button("") {
+                handleCommandT()
+            }
+            .keyboardShortcut("t", modifiers: .command)
+            .opacity(0)
+            .allowsHitTesting(false)
+        }
         .onChange(of: localSelection) { _, newValue in
             if localManager.activeSessionID != newValue {
                 localManager.activeSessionID = newValue
@@ -340,6 +372,29 @@ struct ContentView: View {
             get: { filePathsByServer[serverID] ?? "/" },
             set: { filePathsByServer[serverID] = $0 }
         )
+    }
+
+    private func selectSidebarItem(at index: Int) {
+        if sidebarMode == .local {
+            guard index >= 0 && index < localManager.sessions.count else { return }
+            localSelection = localManager.sessions[index].id
+        } else {
+            guard index >= 0 && index < servers.count else { return }
+            selectedServer = servers[index]
+        }
+    }
+
+    private func openFileManagerTab() {
+        guard sidebarMode == .ssh, let server = selectedServer else { return }
+        selectedTabsByServer[server.id] = .fileManager
+    }
+
+    private func handleCommandT() {
+        if sidebarMode == .local {
+            localManager.createSession()
+        } else if let server = selectedServer {
+            selectedTabsByServer[server.id] = .terminal
+        }
     }
 }
 

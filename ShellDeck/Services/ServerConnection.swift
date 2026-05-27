@@ -67,7 +67,7 @@ final class ServerConnection {
 
     func disconnect() async {
         terminalViewModel.close()
-        monitorService?.stopMonitoring()
+        monitorService?.stopMonitoring(clearHistory: true)
         monitorService = nil
         await sftpService?.disconnect()
         sftpService = nil
@@ -86,7 +86,7 @@ final class ServerConnection {
     private func setupMonitor() {
         guard let client else { return }
         let service = MonitorService()
-        service.startMonitoring(client: client)
+        service.setup(client: client)
         monitorService = service
     }
 

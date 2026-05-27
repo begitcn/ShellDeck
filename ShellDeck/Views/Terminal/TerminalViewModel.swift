@@ -97,6 +97,7 @@ final class TerminalViewModel {
         resizeTask?.cancel()
         resizeTask = nil
         sessionToken = UUID()
+        outputBuffer.removeAll(keepingCapacity: false)
     }
 
     func changeTerminalSize(cols: Int, rows: Int) {

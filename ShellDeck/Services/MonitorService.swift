@@ -26,49 +26,47 @@ final class MonitorService {
     private let maxHistory = 20
     private let pollInterval: UInt64 = 3_000_000_000
 
-    func startMonitoring(client: SSHClient) {
+    func setup(client: SSHClient) {
         self.client = client
-        stopMonitoring()
+    }
+
+    func startMonitoring(client: SSHClient? = nil) {
+        if let client = client {
+            self.client = client
+        }
+        guard self.client != nil else { return }
+        stopMonitoring(clearHistory: false)
 
         monitoringTask = Task { [weak self] in
             while !Task.isCancelled {
+                guard let self = self, self.client != nil else { break }
+                
                 do {
-                    if let self = self {
-                        try await self.pollDisk()
-                    } else {
-                        break
-                    }
+                    try await self.pollDisk()
                 } catch {
                     print("[ShellDeck] Disk poll error: \(error)")
                 }
 
+                guard !Task.isCancelled, self.client != nil else { break }
                 do {
-                    if let self = self {
-                        let mem = try await self.pollMemory()
-                        self.memoryHistory.append(MetricPoint(time: Date(), value: mem))
-                        self.trimHistory(&self.memoryHistory)
-                    } else {
-                        break
-                    }
+                    let mem = try await self.pollMemory()
+                    self.memoryHistory.append(MetricPoint(time: Date(), value: mem))
+                    self.trimHistory(&self.memoryHistory)
                 } catch {
                     print("[ShellDeck] Memory poll error: \(error)")
                 }
 
+                guard !Task.isCancelled, self.client != nil else { break }
                 do {
-                    if let self = self {
-                        let cpu = try await self.pollCPU()
-                        self.cpuHistory.append(MetricPoint(time: Date(), value: cpu))
-                        self.trimHistory(&self.cpuHistory)
-                    } else {
-                        break
-                    }
+                    let cpu = try await self.pollCPU()
+                    self.cpuHistory.append(MetricPoint(time: Date(), value: cpu))
+                    self.trimHistory(&self.cpuHistory)
                 } catch {
                     print("[ShellDeck] CPU poll error: \(error)")
                 }
 
-                guard let pollInterval = self?.pollInterval else { break }
                 do {
-                    try await Task.sleep(nanoseconds: pollInterval)
+                    try await Task.sleep(nanoseconds: self.pollInterval)
                 } catch {
                     break
                 }
@@ -76,13 +74,15 @@ final class MonitorService {
         }
     }
 
-    func stopMonitoring() {
+    func stopMonitoring(clearHistory: Bool = true) {
         monitoringTask?.cancel()
         monitoringTask = nil
-        cpuHistory.removeAll()
-        memoryHistory.removeAll()
-        diskUsed = 0
-        diskTotal = 0
+        if clearHistory {
+            cpuHistory.removeAll()
+            memoryHistory.removeAll()
+            diskUsed = 0
+            diskTotal = 0
+        }
     }
 
     // MARK: - Helpers

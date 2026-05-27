@@ -16,6 +16,12 @@ struct SystemMonitorView: View {
             .padding(20)
         }
         .background(Color(nsColor: .windowBackgroundColor))
+        .onAppear {
+            monitorService.startMonitoring()
+        }
+        .onDisappear {
+            monitorService.stopMonitoring(clearHistory: false)
+        }
     }
 
     // MARK: - CPU
