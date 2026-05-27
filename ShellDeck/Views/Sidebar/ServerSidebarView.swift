@@ -27,7 +27,7 @@ struct ServerSidebarView: View {
     let onConnect: (Server) -> Void
     let onDisconnect: (Server) -> Void
 
-    @AppStorage("appTheme") private var appTheme: String = AppTheme.system.rawValue
+    @AppStorage("appTheme") private var appTheme: String = AppTheme.dark.rawValue
 
     @State private var showAddSheet = false
     @State private var showDeleteConfirmation = false

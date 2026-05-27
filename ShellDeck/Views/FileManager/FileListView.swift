@@ -130,10 +130,6 @@ struct FileListView: View {
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .contentShape(Rectangle())
-                .onTapGesture(count: 2) {
-                    isEditingPath = true
-                }
             }
             
             Button(action: { isEditingPath.toggle() }) {
@@ -170,6 +166,13 @@ struct FileListView: View {
             .help("上传文件到当前目录")
         }
         .padding(8)
+        .background(
+            Color.clear
+                .contentShape(Rectangle())
+                .onTapGesture(count: 2) {
+                    isEditingPath = true
+                }
+        )
         .background(Color(nsColor: .windowBackgroundColor).opacity(0.4))
     }
 

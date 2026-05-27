@@ -34,6 +34,7 @@ struct ContentView: View {
         } detail: {
             detailView
                 .navigationTitle(detailTitle)
+                .toolbarTitleDisplayMode(.inline)
         }
         .environment(localManager)
         .background {

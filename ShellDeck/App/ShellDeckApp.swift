@@ -2,7 +2,6 @@ import SwiftUI
 import SwiftData
 
 enum AppTheme: String, CaseIterable, Identifiable {
-    case system = "system"
     case light = "light"
     case dark = "dark"
     
@@ -10,7 +9,6 @@ enum AppTheme: String, CaseIterable, Identifiable {
     
     var displayName: String {
         switch self {
-        case .system: return "跟随系统"
         case .light: return "浅色模式"
         case .dark: return "深色模式"
         }
@@ -18,7 +16,6 @@ enum AppTheme: String, CaseIterable, Identifiable {
     
     var icon: String {
         switch self {
-        case .system: return "desktopcomputer"
         case .light: return "sun.max.fill"
         case .dark: return "moon.fill"
         }
@@ -26,7 +23,6 @@ enum AppTheme: String, CaseIterable, Identifiable {
     
     var colorScheme: ColorScheme? {
         switch self {
-        case .system: return nil
         case .light: return .light
         case .dark: return .dark
         }
@@ -35,7 +31,7 @@ enum AppTheme: String, CaseIterable, Identifiable {
 
 @main
 struct ShellDeckApp: App {
-    @AppStorage("appTheme") private var appTheme: String = AppTheme.system.rawValue
+    @AppStorage("appTheme") private var appTheme: String = AppTheme.dark.rawValue
 
     let container: ModelContainer = {
         let schema = Schema([Server.self, ServerGroup.self])
@@ -52,10 +48,10 @@ struct ShellDeckApp: App {
             ContentView()
                 .preferredColorScheme(AppTheme(rawValue: appTheme)?.colorScheme)
                 .onAppear {
-                    updateWindowAppearance(for: AppTheme(rawValue: appTheme) ?? .system)
+                    updateWindowAppearance(for: AppTheme(rawValue: appTheme) ?? .dark)
                 }
                 .onChange(of: appTheme) { _, newValue in
-                    updateWindowAppearance(for: AppTheme(rawValue: newValue) ?? .system)
+                    updateWindowAppearance(for: AppTheme(rawValue: newValue) ?? .dark)
                 }
         }
         .modelContainer(container)
@@ -65,8 +61,6 @@ struct ShellDeckApp: App {
         DispatchQueue.main.async {
             for window in NSApp.windows {
                 switch theme {
-                case .system:
-                    window.appearance = nil
                 case .light:
                     window.appearance = NSAppearance(named: .aqua)
                 case .dark:

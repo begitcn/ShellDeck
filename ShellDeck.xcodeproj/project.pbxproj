@@ -15,9 +15,22 @@
 		DCE5EE952FC5371E00AB26F0 /* ShellDeck.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ShellDeck.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		DCE4C0392FC6F3A40065D67B /* Exceptions for "ShellDeck" folder in "ShellDeck" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				App/Info.plist,
+			);
+			target = DCE5EE942FC5371E00AB26F0 /* ShellDeck */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		DCE5EE972FC5371E00AB26F0 /* ShellDeck */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				DCE4C0392FC6F3A40065D67B /* Exceptions for "ShellDeck" folder in "ShellDeck" target */,
+			);
 			path = ShellDeck;
 			sourceTree = "<group>";
 		};
@@ -273,7 +286,7 @@
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
-				EXCLUDED_SOURCE_FILE_NAMES = "Info.plist";
+				EXCLUDED_SOURCE_FILE_NAMES = Info.plist;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = ShellDeck/App/Info.plist;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
@@ -308,7 +321,7 @@
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
-				EXCLUDED_SOURCE_FILE_NAMES = "Info.plist";
+				EXCLUDED_SOURCE_FILE_NAMES = Info.plist;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = ShellDeck/App/Info.plist;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
