@@ -49,6 +49,9 @@ struct ShellDeckApp: App {
                 .preferredColorScheme(AppTheme(rawValue: appTheme)?.colorScheme)
                 .onAppear {
                     updateWindowAppearance(for: AppTheme(rawValue: appTheme) ?? .dark)
+                    Task {
+                        await UpdateService.shared.checkForUpdates(manual: false)
+                    }
                 }
                 .onChange(of: appTheme) { _, newValue in
                     updateWindowAppearance(for: AppTheme(rawValue: newValue) ?? .dark)

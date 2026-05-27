@@ -29,6 +29,9 @@ struct ServerSidebarView: View {
 
     @AppStorage("appTheme") private var appTheme: String = AppTheme.dark.rawValue
 
+    @State private var updateService = UpdateService.shared
+    @State private var showSettingsSheet = false
+
     @State private var showAddSheet = false
     @State private var showDeleteConfirmation = false
     @State private var serverToDelete: Server?
@@ -69,6 +72,7 @@ struct ServerSidebarView: View {
         .sheet(isPresented: $showAddGroupSheet) { addGroupSheet }
         .sheet(isPresented: $showRenameGroupSheet) { renameGroupSheet }
         .sheet(isPresented: $showRenameLocalSheet) { renameLocalSheet }
+        .sheet(isPresented: $showSettingsSheet) { SettingsView() }
         .confirmationDialog("确认删除", isPresented: $showDeleteConfirmation, presenting: serverToDelete)
         { server in
             Button("删除", role: .destructive) { deleteServer(server); if selection?.id == server.id { selection = nil } }
@@ -480,30 +484,43 @@ struct ServerSidebarView: View {
 
     private var themeFooterView: some View {
         HStack(spacing: 8) {
-            Image(systemName: "paintpalette.fill")
-                .foregroundStyle(.secondary)
-                .imageScale(.medium)
-            
-            Text("外观主题")
+            Text("版本 v\(updateService.currentVersion)")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
             
+            if updateService.updateAvailable {
+                Text("有新版本")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 1)
+                    .background(Color.green)
+                    .cornerRadius(8)
+            }
+            
             Spacer()
             
-            Picker("", selection: $appTheme) {
-                ForEach(AppTheme.allCases) { theme in
-                    Image(systemName: theme.icon)
-                        .tag(theme.rawValue)
-                        .help(theme.displayName)
+            Button(action: {
+                showSettingsSheet = true
+            }) {
+                ZStack(alignment: .topTrailing) {
+                    Image(systemName: "gearshape.fill")
+                        .font(.title3)
+                        .foregroundStyle(.secondary)
+                    
+                    if updateService.updateAvailable {
+                        Circle()
+                            .fill(Color.green)
+                            .frame(width: 8, height: 8)
+                            .offset(x: 3, y: -3)
+                    }
                 }
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .frame(width: 90)
-            .controlSize(.small)
+            .buttonStyle(.plain)
+            .help("偏好设置与关于")
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
         .background(.ultraThinMaterial)
     }
 }
