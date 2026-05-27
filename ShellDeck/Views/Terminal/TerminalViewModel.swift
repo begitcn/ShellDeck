@@ -7,10 +7,17 @@ import NIOSSH
 @Observable
 final class TerminalViewModel {
     private(set) var isConnected = false
+    @ObservationIgnored
     private var ptyTask: Task<Void, Never>?
+    @ObservationIgnored
     private var stdinWriter: TTYStdinWriter?
+    @ObservationIgnored
     private var outputBuffer: [UInt8] = []
+    @ObservationIgnored
+    private var sessionToken = UUID()
     private let maxBufferedBytes = 256 * 1024
+    @ObservationIgnored
+    private var lastWindowSize: (cols: Int, rows: Int)?
 
     var onOutput: ((ArraySlice<UInt8>) -> Void)? {
         didSet {
@@ -23,6 +30,9 @@ final class TerminalViewModel {
         if ptyTask != nil { close() }
         isConnected = true
         outputBuffer.removeAll(keepingCapacity: true)
+        lastWindowSize = nil
+        let token = UUID()
+        sessionToken = token
 
         let request = SSHChannelRequestEvent.PseudoTerminalRequest(
             wantReply: true,
@@ -38,15 +48,17 @@ final class TerminalViewModel {
             do {
                 try await client.withPTY(request) { inbound, outbound in
                     await MainActor.run {
-                        self?.stdinWriter = outbound
+                        guard let self, self.sessionToken == token else { return }
+                        self.stdinWriter = outbound
                     }
                     for try await output in inbound {
                         switch output {
                         case .stdout(let buffer):
                             await MainActor.run {
+                                guard let self, self.sessionToken == token else { return }
                                 let chunk = Array(buffer.readableBytesView)
-                                self?.appendToBuffer(chunk)
-                                self?.onOutput?(ArraySlice(chunk))
+                                self.appendToBuffer(chunk)
+                                self.onOutput?(ArraySlice(chunk))
                             }
                         case .stderr:
                             break
@@ -56,7 +68,10 @@ final class TerminalViewModel {
             } catch {
                 print("[ShellDeck] PTY error: \(error)")
             }
-            await MainActor.run { self?.isConnected = false }
+            await MainActor.run {
+                guard let self, self.sessionToken == token else { return }
+                self.isConnected = false
+            }
         }
     }
 
@@ -72,6 +87,18 @@ final class TerminalViewModel {
         ptyTask = nil
         stdinWriter = nil
         isConnected = false
+        lastWindowSize = nil
+        sessionToken = UUID()
+    }
+
+    func changeTerminalSize(cols: Int, rows: Int) {
+        guard cols > 1, rows > 1 else { return }
+        guard lastWindowSize?.cols != cols || lastWindowSize?.rows != rows else { return }
+        lastWindowSize = (cols, rows)
+
+        Task { [writer = stdinWriter] in
+            try? await writer?.changeSize(cols: cols, rows: rows, pixelWidth: 0, pixelHeight: 0)
+        }
     }
 
     private func appendToBuffer(_ bytes: [UInt8]) {

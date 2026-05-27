@@ -11,13 +11,21 @@ struct FileListView: View {
     @State private var showError = false
     @State private var showDeleteConfirmation = false
     @State private var itemToDelete: SFTPItem?
+    @State private var loadToken = UUID()
+    @State private var lastTapTime: Date?
 
     var body: some View {
         VStack(spacing: 0) {
             toolbar
             Divider()
+            TransferProgressView(
+                tasks: sftpService.transferTasks,
+                onDismissCompleted: { sftpService.dismissCompletedTasks() },
+                onDismissTask: { sftpService.removeTask($0) }
+            )
             content
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .alert("错误", isPresented: $showError, presenting: errorMessage) { _ in
             Button("确定") {}
         } message: { message in
@@ -41,6 +49,7 @@ struct FileListView: View {
         .onChange(of: serviceIdentity) { _, _ in
             selectedItem = nil
             items = []
+            loadToken = UUID()
             Task { await loadDirectory() }
         }
     }
@@ -96,6 +105,7 @@ struct FileListView: View {
                 systemImage: "folder",
                 description: Text("此目录中没有文件")
             )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
             ScrollView {
                 LazyVStack(spacing: 0) {
@@ -131,18 +141,15 @@ struct FileListView: View {
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 3)
-        .background(isSelected ? Color.accentColor.opacity(0.3) : (index % 2 == 1 ? Color(nsColor: .alternatingContentBackgroundColors.last ?? .controlBackgroundColor).opacity(0.5) : Color.clear))
+        .background(alignment: .leading) {
+            RoundedRectangle(cornerRadius: 4)
+                .fill(isSelected ? Color.accentColor.opacity(0.3) : (index % 2 == 1 ? Color(nsColor: .alternatingContentBackgroundColors.last ?? .controlBackgroundColor).opacity(0.5) : Color.clear))
+                .padding(.leading, 4)
+        }
         .contentShape(Rectangle())
         .onTapGesture {
-            selectedItem = item.id
+            handleTap(item: item)
         }
-        .highPriorityGesture(TapGesture(count: 2).onEnded {
-            selectedItem = item.id
-            if item.isDirectory {
-                currentPath = item.path
-                Task { await loadDirectory() }
-            }
-        })
         .contextMenu {
             if item.isDirectory {
                 Button("打开") {
@@ -162,6 +169,20 @@ struct FileListView: View {
 
     // MARK: - Actions
 
+    private func handleTap(item: SFTPItem) {
+        let now = Date()
+        if let lastTap = lastTapTime, now.timeIntervalSince(lastTap) < 0.3 {
+            lastTapTime = nil
+            if item.isDirectory {
+                currentPath = item.path
+                Task { await loadDirectory() }
+            }
+        } else {
+            selectedItem = item.id
+            lastTapTime = now
+        }
+    }
+
     private func goUp() {
         guard currentPath != "/" else { return }
         let parent = (currentPath as NSString).deletingLastPathComponent
@@ -171,31 +192,33 @@ struct FileListView: View {
 
     @Sendable
     private func loadDirectory() async {
+        let token = loadToken
         isLoading = true
         defer { isLoading = false }
         do {
-            items = try await sftpService.listDirectory(at: currentPath)
+            let directory = try await sftpService.listDirectory(at: currentPath)
+            guard token == loadToken else { return }
+            items = directory
         } catch {
+            guard token == loadToken else { return }
             errorMessage = error.localizedDescription
             showError = true
         }
     }
 
     private func downloadItem(_ item: SFTPItem) {
-        NSLog("[ShellDeck] downloadItem start: \(item.name)")
         let panel = NSSavePanel()
         panel.nameFieldStringValue = item.name
         panel.canCreateDirectories = true
         guard let window = viewWindow else { return }
         panel.beginSheetModal(for: window) { response in
             guard response == .OK, let url = panel.url else { return }
-            NSLog("[ShellDeck] downloadItem savePanel OK: \(url.path)")
+            let task = TransferTask(fileName: item.name, type: .download, totalBytes: item.size)
+            self.sftpService.transferTasks.append(task)
             Task {
                 do {
-                    try await self.sftpService.downloadFile(remotePath: item.path, to: url)
-                    NSLog("[ShellDeck] downloadItem done")
+                    try await self.sftpService.downloadFile(remotePath: item.path, to: url, task: task)
                 } catch {
-                    NSLog("[ShellDeck] downloadItem error: \(error)")
                     await MainActor.run {
                         self.errorMessage = error.localizedDescription
                         self.showError = true
@@ -214,9 +237,13 @@ struct FileListView: View {
         panel.beginSheetModal(for: window) { response in
             guard response == .OK, let url = panel.url else { return }
             let remotePath = self.currentPath == "/" ? "/\(url.lastPathComponent)" : "\(self.currentPath)/\(url.lastPathComponent)"
+            let attrs = (try? FileManager.default.attributesOfItem(atPath: url.path)) ?? [:]
+            let fileSize = (attrs[.size] as? UInt64) ?? 0
+            let task = TransferTask(fileName: url.lastPathComponent, type: .upload, totalBytes: fileSize)
+            self.sftpService.transferTasks.append(task)
             Task {
                 do {
-                    try await self.sftpService.uploadFile(from: url, to: remotePath)
+                    try await self.sftpService.uploadFile(from: url, to: remotePath, task: task)
                     await self.loadDirectory()
                 } catch {
                     await MainActor.run {

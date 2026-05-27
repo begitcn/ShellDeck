@@ -2,11 +2,29 @@ import SwiftUI
 import SwiftTerm
 
 private final class FocusableTerminalView: TerminalView {
+    private var lastUsableFrameSize: NSSize?
+
+    override func setFrameSize(_ newSize: NSSize) {
+        if terminal != nil, isCollapsed(newSize), lastUsableFrameSize != nil {
+            return
+        }
+
+        super.setFrameSize(newSize)
+
+        if !isCollapsed(newSize) {
+            lastUsableFrameSize = newSize
+        }
+    }
+
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         if window != nil {
             window?.makeFirstResponder(self)
         }
+    }
+
+    private func isCollapsed(_ size: NSSize) -> Bool {
+        size.width < 32 || size.height < 24
     }
 }
 
@@ -20,16 +38,23 @@ struct TerminalContainerView: NSViewRepresentable {
     func makeNSView(context: Context) -> TerminalView {
         let terminal = FocusableTerminalView(frame: .zero)
         terminal.terminalDelegate = context.coordinator
-        terminal.configureNativeColors()
+        TerminalAppearance.apply(to: terminal)
         context.coordinator.connect(viewModel: viewModel, terminal: terminal)
         return terminal
     }
 
     func updateNSView(_ nsView: TerminalView, context: Context) {
-        guard context.coordinator.viewModel !== viewModel else { return }
-        context.coordinator.viewModel?.onOutput = nil
-        nsView.terminal.resetToInitialState()
-        context.coordinator.connect(viewModel: viewModel, terminal: nsView)
+        if context.coordinator.viewModel !== viewModel {
+            context.coordinator.viewModel?.onOutput = nil
+            nsView.terminal.resetToInitialState()
+            context.coordinator.connect(viewModel: viewModel, terminal: nsView)
+        }
+
+        // When the SSH tab becomes visible again, force a full redraw of the existing buffer.
+        context.coordinator.scheduleDisplayRefresh(for: nsView)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            context.coordinator.scheduleDisplayRefresh(for: nsView)
+        }
     }
 
     static func dismantleNSView(_ nsView: TerminalView, coordinator: Coordinator) {
@@ -40,12 +65,14 @@ struct TerminalContainerView: NSViewRepresentable {
 extension TerminalContainerView {
     final class Coordinator: TerminalViewDelegate {
         private(set) var viewModel: TerminalViewModel?
+        private var lastStableSize: (cols: Int, rows: Int)?
 
         func connect(viewModel: TerminalViewModel, terminal: TerminalView) {
             self.viewModel = viewModel
             viewModel.onOutput = { [weak terminal] bytes in
                 terminal?.feed(byteArray: bytes)
             }
+            scheduleDisplayRefresh(for: terminal)
         }
 
         // MARK: - TerminalViewDelegate
@@ -55,7 +82,25 @@ extension TerminalContainerView {
         }
 
         func sizeChanged(source: TerminalView, newCols: Int, newRows: Int) {
-            // TODO: send window-change to SSH server when SSHShell supports it
+            guard newCols > 1, newRows > 1 else {
+                if let stable = lastStableSize {
+                    DispatchQueue.main.async { [weak source] in
+                        source?.resize(cols: stable.cols, rows: stable.rows)
+                    }
+                }
+                return
+            }
+            lastStableSize = (newCols, newRows)
+            viewModel?.changeTerminalSize(cols: newCols, rows: newRows)
+        }
+
+        func scheduleDisplayRefresh(for terminal: TerminalView) {
+            guard terminal.window != nil else { return }
+            if let stable = lastStableSize, terminal.terminal.cols <= 1 || terminal.terminal.rows <= 1 {
+                terminal.resize(cols: stable.cols, rows: stable.rows)
+            }
+            terminal.terminal.refresh(startRow: 0, endRow: max(0, terminal.terminal.rows - 1))
+            terminal.needsDisplay = true
         }
 
         func scrolled(source: TerminalView, position: Double) {}
