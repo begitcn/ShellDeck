@@ -46,7 +46,11 @@ xcodebuild \
     -archivePath "$ARCHIVE_PATH" \
     archive \
     MARKETING_VERSION="$APP_VERSION" \
-    CURRENT_PROJECT_VERSION="1"
+    CURRENT_PROJECT_VERSION="1" \
+    ${MACOSX_DEPLOYMENT_TARGET:+MACOSX_DEPLOYMENT_TARGET=$MACOSX_DEPLOYMENT_TARGET} \
+    ${CODE_SIGN_IDENTITY:+CODE_SIGN_IDENTITY=$CODE_SIGN_IDENTITY} \
+    ${CODE_SIGNING_REQUIRED:+CODE_SIGNING_REQUIRED=$CODE_SIGNING_REQUIRED} \
+    ${CODE_SIGNING_ALLOWED:+CODE_SIGNING_ALLOWED=$CODE_SIGNING_ALLOWED}
 
 echo "   Archive built at $ARCHIVE_PATH"
 
@@ -60,10 +64,28 @@ EXPORT_DIR="$DIST_DIR/.export"
 rm -rf "$EXPORT_DIR"
 mkdir -p "$EXPORT_DIR"
 
-xcodebuild \
-    -archivePath "$ARCHIVE_PATH" \
-    -exportPath "$EXPORT_DIR" \
-    -exportOptionsPlist /dev/stdin <<< '<?xml version="1.0" encoding="UTF-8"?>
+if [ "${CODE_SIGNING_ALLOWED:-YES}" = "NO" ]; then
+    # CI build: skip signing entirely, export as raw app
+    xcodebuild \
+        -archivePath "$ARCHIVE_PATH" \
+        -exportPath "$EXPORT_DIR" \
+        -exportOptionsPlist /dev/stdin <<< '<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>method</key>
+    <string>developer-id</string>
+    <key>signingStyle</key>
+    <string>manual</string>
+    <key>signingDisabled</key>
+    <true/>
+</dict>
+</plist>'
+else
+    xcodebuild \
+        -archivePath "$ARCHIVE_PATH" \
+        -exportPath "$EXPORT_DIR" \
+        -exportOptionsPlist /dev/stdin <<< '<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
@@ -73,6 +95,7 @@ xcodebuild \
     <string>automatic</string>
 </dict>
 </plist>'
+fi
 
 # Find the exported .app
 APP_BUNDLE=$(find "$EXPORT_DIR" -name "*.app" -maxdepth 1 -type d | head -1)
