@@ -103,15 +103,38 @@ Scripts written to `FileManager.default.temporaryDirectory` must be executed **b
 - `detach` with `-force` to handle busy volumes
 - Mount point is extracted from plist output: `system-entities[].mount-point`
 
+## Version Management
+
+### Single source of truth
+
+All version info reads from the **`VERSION`** file at project root:
+
+```
+ShellDeck/VERSION -> ../VERSION  (symlink)
+```
+
+- `UpdateService.currentVersion` — reads from `Bundle.main` at runtime
+- `CFBundleShortVersionString` / `CFBundleVersion` — set by a Run Script build phase that reads `$(SRCROOT)/VERSION` and patches the built `Info.plist` via `PlistBuddy`
+- CI (`VERSION` file check in GitHub Actions) — compares tag with `VERSION` content
+
+### Release workflow
+
+1. Update `VERSION` file (e.g. `echo "1.0.1" > VERSION`)
+2. Commit + tag (`git tag v1.0.1`)
+3. CI reads `VERSION`, builds, and releases
+
+No need to touch Swift code or Xcode project settings for version bumps.
+
 ## Porting to Another Project
 
 ### Required changes
 
-1. **Update URL**: Replace `https://shelldeck.782389.xyz` with your server endpoint
-2. **Response format**: Either match GitHub release JSON or change the `Codable` struct
-3. **App bundle name**: Replace `ShellDeck.app` in script if your app has a different name
-4. **Version scheme**: `currentVersion` property — currently hardcoded to `"0.0.1"`
-5. **DMG asset naming**: The `#if arch(arm64)` / `targetArch` matching logic — adjust if your DMG naming convention differs
+1. **`ShellDeck/VERSION -> ../VERSION`**: Create a symlink so the app bundle includes the version file
+2. **Run Script build phase**: Add a "Sync Version from VERSION file" phase that reads `$(SRCROOT)/VERSION` and patches the built `Info.plist`
+3. **Update URL**: Replace `https://shelldeck.782389.xyz` with your server endpoint
+4. **Response format**: Either match GitHub release JSON or change the `Codable` struct
+5. **App bundle name**: Replace `ShellDeck.app` in script if your app has a different name
+6. **DMG asset naming**: The `#if arch(arm64)` / `targetArch` matching logic — adjust if your DMG naming convention differs
 
 ### Minimal server requirements
 

@@ -32,7 +32,10 @@ public final class UpdateService {
     private var downloadManager: DownloadManager?
     
     public var currentVersion: String {
-        "0.0.4"
+        Bundle.main.url(forResource: "VERSION", withExtension: nil)
+            .flatMap { try? String(contentsOf: $0, encoding: .utf8) }
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            ?? "0.0.1"
     }
     
     private init() {}

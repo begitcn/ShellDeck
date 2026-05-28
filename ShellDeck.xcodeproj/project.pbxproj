@@ -75,6 +75,7 @@
 				DCE5EE912FC5371E00AB26F0 /* Sources */,
 				DCE5EE922FC5371E00AB26F0 /* Frameworks */,
 				DCE5EE932FC5371E00AB26F0 /* Resources */,
+				DCE5EEB02FCAAAA00AB26F0 /* Sync Version from VERSION file */,
 			);
 			buildRules = (
 			);
@@ -140,6 +141,25 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		DCE5EEB02FCAAAA00AB26F0 /* Sync Version from VERSION file */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/VERSION",
+			);
+			name = "Sync Version from VERSION file";
+			outputPaths = (
+				"$(DERIVED_FILE_DIR)/version_synced.stamp",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "VERSION=$(cat \"$SRCROOT/VERSION\")\n/usr/libexec/PlistBuddy -c \"Set :CFBundleShortVersionString $VERSION\" \"$BUILT_PRODUCTS_DIR/$INFOPLIST_PATH\" 2>/dev/null || true\n/usr/libexec/PlistBuddy -c \"Set :CFBundleVersion $VERSION\" \"$BUILT_PRODUCTS_DIR/$INFOPLIST_PATH\" 2>/dev/null || true\ntouch \"$DERIVED_FILE_DIR/version_synced.stamp\"\n";
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		DCE5EE912FC5371E00AB26F0 /* Sources */ = {
