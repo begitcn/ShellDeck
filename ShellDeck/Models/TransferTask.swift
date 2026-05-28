@@ -1,4 +1,5 @@
 import Foundation
+import Observation
 
 enum TransferType: String, CaseIterable {
     case upload

@@ -264,7 +264,7 @@ enum SSHService {
         try skipTag(0x30)
         let outerOctet = try readTag(0x04)
         var inner = 0
-        func readInner(offset: inout Int) throws -> Data {
+        func readInner() throws -> Data {
             guard inner < outerOctet.count, outerOctet[inner] == 0x04 else { throw SSHError.invalidPrivateKey }
             inner += 1
             let len: Int
@@ -282,7 +282,7 @@ enum SSHService {
             guard inner + len <= outerOctet.count else { throw SSHError.invalidPrivateKey }
             return outerOctet[inner..<inner + len]
         }
-        let keyData = try readInner(offset: &inner)
+        let keyData = try readInner()
         return try Curve25519.Signing.PrivateKey(rawRepresentation: keyData)
     }
 

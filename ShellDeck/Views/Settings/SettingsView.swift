@@ -224,7 +224,7 @@ struct SettingsView: View {
             ProgressView()
                 .controlSize(.small)
             
-            Text("正在连接 GitHub 检查最新版本...")
+            Text("正在检查最新版本...")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
         }
@@ -278,40 +278,14 @@ struct SettingsView: View {
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 16)
             
-            HStack(spacing: 12) {
-                Button("重试") {
-                    Task {
-                        await updateService.checkForUpdates(manual: true)
-                    }
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-                
-                if let url = URL(string: "https://github.com/begitcn/ShellDeck/releases/latest") {
-                    Link(destination: url) {
-                        Label("浏览器查看", systemImage: "safari")
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
+            Button("重试") {
+                Task {
+                    await updateService.checkForUpdates(manual: true)
                 }
             }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
             .padding(.top, 4)
-            
-            // Helpful troubleshooting tip for TUN/Enhanced mode routing
-            HStack(alignment: .top, spacing: 6) {
-                Image(systemName: "info.circle")
-                    .font(.caption)
-                    .foregroundStyle(.blue)
-                Text("提示：如遇到连接失败或请求超限，请尝试临时关闭代理软件的 TUN (虚拟网卡) 模式或增强模式。")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(nil)
-                    .multilineTextAlignment(.leading)
-            }
-            .padding(10)
-            .background(Color.blue.opacity(0.04))
-            .cornerRadius(6)
-            .padding(.top, 8)
         }
         .padding(.vertical, 10)
     }
@@ -381,21 +355,14 @@ struct SettingsView: View {
                 .background(Color.green.opacity(0.06))
                 .cornerRadius(8)
             } else {
-                HStack(spacing: 12) {
-                    Button("忽略此版本") {
-                        updateService.ignoreVersion(version)
-                    }
-                    .buttonStyle(.borderless)
-                    .foregroundStyle(.secondary)
-                    .font(.subheadline)
-                    
+                HStack {
                     Spacer()
-                    
                     Button("下载并安装") {
                         updateService.downloadAndInstall()
                     }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.regular)
+                    Spacer()
                 }
                 .padding(.top, 4)
             }

@@ -1,5 +1,6 @@
 import Foundation
 import AppKit
+import Observation
 
 public enum UpdateCheckStatus: Equatable {
     case idle
@@ -28,81 +29,36 @@ public final class UpdateService {
     public var downloadError: String? = nil
     public var downloadedFileUrl: URL? = nil
     
-    private let githubRepo = "begitcn/ShellDeck"
     private var downloadManager: DownloadManager?
     
-    private let lastCheckedKey = "ShellDeck_LastCheckedDate"
-    private let ignoredVersionKey = "ShellDeck_IgnoredVersion"
-    
     public var currentVersion: String {
-        "0.0.1" // Hardcoded to 0.0.1 for testing updates!
+        "0.0.4"
     }
     
     private init() {}
     
-    /// Resets the status to idle.
     public func resetStatus() {
         checkStatus = .idle
         downloadError = nil
     }
     
-    /// Checks for updates.
-    /// - Parameter manual: If true, ignores the 24-hour cache limit.
     public func checkForUpdates(manual: Bool = false) async {
         guard checkStatus != .checking else { return }
-        
-        let now = Date()
-        if !manual {
-            // Respect GitHub API Rate limits: check cache first.
-            if let lastChecked = UserDefaults.standard.object(forKey: lastCheckedKey) as? Date {
-                let hoursSinceLastCheck = now.timeIntervalSince(lastChecked) / 3600.0
-                if hoursSinceLastCheck < 24.0 {
-                    // Less than 24 hours since last check, skip and stay idle.
-                    checkStatus = .idle
-                    return
-                }
-            }
-        } else {
-            // Throttle manual check to avoid spamming the button.
-            if let lastChecked = UserDefaults.standard.object(forKey: lastCheckedKey) as? Date,
-               now.timeIntervalSince(lastChecked) < 5.0 {
-                // If throttled, don't hit the API but show cached state if update is already known
-                if updateAvailable, let tag = latestVersion {
-                    checkStatus = .updateAvailable(version: tag, notes: releaseNotes, downloadUrl: downloadUrl, releaseUrl: releaseUrl)
-                } else {
-                    checkStatus = .upToDate
-                }
-                return
-            }
-        }
         
         checkStatus = .checking
         downloadError = nil
         
-        let urlString = "https://api.github.com/repos/\(githubRepo)/releases/latest"
-        guard let url = URL(string: urlString) else {
+        guard let url = URL(string: "https://shelldeck.782389.xyz") else {
             checkStatus = .error("无效的更新检测 URL")
             return
         }
         
-        var request = URLRequest(url: url)
-        request.setValue("ShellDeck-Updater", forHTTPHeaderField: "User-Agent")
-        request.setValue("application/vnd.github.v3+json", forHTTPHeaderField: "Accept")
+        let request = URLRequest(url: url)
         
         do {
             let (data, response) = try await URLSession.shared.data(for: request)
-            guard let httpResponse = response as? HTTPURLResponse else {
-                checkStatus = .error("无效的服务器响应")
-                return
-            }
-            
-            if httpResponse.statusCode == 403 {
-                checkStatus = .error("请求次数超限 (GitHub API Rate Limit)")
-                return
-            }
-            
-            guard httpResponse.statusCode == 200 else {
-                checkStatus = .error("服务器错误 (状态码 \(httpResponse.statusCode))")
+            guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+                checkStatus = .error("服务器错误")
                 return
             }
             
@@ -120,19 +76,8 @@ public final class UpdateService {
             
             let release = try JSONDecoder().decode(Release.self, from: data)
             let tag = release.tag_name.trimmingCharacters(in: CharacterSet(charactersIn: "vV"))
-            
-            // Check if user ignored this version (only respect for automatic checks)
-            if !manual {
-                let ignoredVersion = UserDefaults.standard.string(forKey: ignoredVersionKey) ?? ""
-                if ignoredVersion == tag {
-                    checkStatus = .idle
-                    return
-                }
-            }
-            
             let isNew = isVersion(tag, greaterThan: currentVersion)
             
-            // Find matched architecture asset:
             #if arch(arm64)
             let targetArch = "aarch64"
             #else
@@ -161,19 +106,9 @@ public final class UpdateService {
             } else {
                 self.checkStatus = .upToDate
             }
-            
-            // Cache the last check date only if API call succeeded.
-            UserDefaults.standard.set(now, forKey: lastCheckedKey)
         } catch {
-            self.checkStatus = .error(error.localizedDescription)
-            print("Failed to check for updates: \(error)")
+            self.checkStatus = .error("检查失败")
         }
-    }
-    
-    public func ignoreVersion(_ version: String) {
-        UserDefaults.standard.set(version, forKey: ignoredVersionKey)
-        updateAvailable = false
-        checkStatus = .idle
     }
     
     public func downloadAndInstall() {
@@ -207,13 +142,12 @@ public final class UpdateService {
                 } else if let fileUrl = fileUrl {
                     self.downloadedFileUrl = fileUrl
                     do {
-                        try await self.installAndRestart(dmgUrl: fileUrl)
+                        try await UpdateService.silentInstall(dmgUrl: fileUrl)
                     } catch {
-                        self.downloadedFileUrl = nil // Reset so UI exits the stuck loading screen!
-                        self.downloadError = "自动静默安装失败: \(error.localizedDescription)"
-                        self.checkStatus = .error("静默安装失败: \(error.localizedDescription)。我们将为您打开挂载盘进行手动安装。")
-                        // Fallback: manually mount DMG so user can install
-                        self.openInstaller(at: fileUrl)
+                        self.downloadedFileUrl = nil
+                        self.downloadError = "自动安装失败，将打开 DMG 手动安装"
+                        self.checkStatus = .error("安装失败")
+                        NSWorkspace.shared.open(fileUrl)
                     }
                 }
             }
@@ -228,125 +162,71 @@ public final class UpdateService {
         downloadProgress = 0.0
     }
     
-    public func openInstaller(at url: URL) {
-        NSWorkspace.shared.open(url)
+    // MARK: - Silent Install
+    
+    nonisolated private static func silentInstall(dmgUrl: URL) async throws {
+        let mountPoint = try await mountDMG(dmgUrl: dmgUrl)
+        defer { try? unmountDMG(mountPoint: mountPoint) }
+        
+        let items = try FileManager.default.contentsOfDirectory(at: mountPoint, includingPropertiesForKeys: nil)
+            .filter { $0.pathExtension == "app" }
+        guard let mountedApp = items.first else {
+            throw NSError(domain: "UpdaterError", code: 404, userInfo: nil)
+        }
+        
+        let current = Bundle.main.bundleURL
+        let newPath = current.deletingLastPathComponent().appendingPathComponent("ShellDeck.app.new")
+        
+        try? FileManager.default.removeItem(at: newPath)
+        try FileManager.default.copyItem(at: mountedApp, to: newPath)
+        
+        let script = """
+        #!/bin/bash
+        sleep 4
+        rm -rf "\(current.path)"
+        mv "\(newPath.path)" "\(current.path)"
+        rm -f "\(dmgUrl.path)" 2>/dev/null
+        hdiutil detach "\(mountPoint.path)" -force 2>/dev/null
+        open "\(current.path)"
+        """
+        let scriptUrl = FileManager.default.temporaryDirectory.appendingPathComponent("sd-up-\(UUID().uuidString).sh")
+        try script.write(to: scriptUrl, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: scriptUrl.path)
+        
+        let proc = Process()
+        proc.executableURL = URL(fileURLWithPath: "/bin/bash")
+        proc.arguments = [scriptUrl.path]
+        try proc.run()
+        
+        await MainActor.run { exit(0) }
     }
     
-    // MARK: - Background Installer & Restarter
-    
-    private func installAndRestart(dmgUrl: URL) async throws {
-        // Offload the heavy file operations and mounting to a background task detached from the MainActor
-        try await Task.detached(priority: .userInitiated) {
-            // 1. Mount the DMG silently in the background
-            let mountPoint = try await self.mountDMG(url: dmgUrl)
-            defer {
-                Task {
-                    try? await self.unmountDMG(mountPoint: mountPoint)
-                }
-            }
-            
-            // 2. Locate ShellDeck.app inside the mounted volume
-            let mountedAppUrl = mountPoint.appendingPathComponent("ShellDeck.app")
-            guard FileManager.default.fileExists(atPath: mountedAppUrl.path) else {
-                throw NSError(domain: "UpdaterError", code: 404, userInfo: [NSLocalizedDescriptionKey: "挂载盘中未找到 ShellDeck.app"])
-            }
-            
-            // 3. Get the path of the current running app
-            let currentAppUrl = Bundle.main.bundleURL // e.g. /Applications/ShellDeck.app
-            let appsDirectory = currentAppUrl.deletingLastPathComponent() // e.g. /Applications
-            
-            // 4. Create a temporary path in the target directory
-            let tempAppUrl = appsDirectory.appendingPathComponent("ShellDeck.app.new")
-            
-            // Clean up any stale temp app
-            if FileManager.default.fileExists(atPath: tempAppUrl.path) {
-                try? FileManager.default.removeItem(at: tempAppUrl)
-            }
-            
-            // 5. Copy the new app bundle to the target directory
-            try FileManager.default.copyItem(at: mountedAppUrl, to: tempAppUrl)
-            
-            // 6. Perform the atomic swap
-            let backupAppUrl = appsDirectory.appendingPathComponent("ShellDeck.app.old")
-            if FileManager.default.fileExists(atPath: backupAppUrl.path) {
-                try? FileManager.default.removeItem(at: backupAppUrl)
-            }
-            
-            // Rename current running app to .old
-            try FileManager.default.moveItem(at: currentAppUrl, to: backupAppUrl)
-            
-            do {
-                // Move new app into place
-                try FileManager.default.moveItem(at: tempAppUrl, to: currentAppUrl)
-                // Delete the old backup app bundle in the background
-                try? FileManager.default.removeItem(at: backupAppUrl)
-            } catch {
-                // Revert rename if it failed
-                try? FileManager.default.moveItem(at: backupAppUrl, to: currentAppUrl)
-                throw error
-            }
-            
-            // 7. Restart the application
-            let configuration = NSWorkspace.OpenConfiguration()
-            configuration.arguments = []
-            try await NSWorkspace.shared.openApplication(at: currentAppUrl, configuration: configuration)
-            
-            // Exit current process on the MainActor
-            await MainActor.run {
-                NSApp.terminate(nil)
-            }
-        }.value
+    nonisolated private static func mountDMG(dmgUrl: URL) async throws -> URL {
+        let proc = Process()
+        proc.executableURL = URL(fileURLWithPath: "/usr/bin/hdiutil")
+        proc.arguments = ["attach", "-nobrowse", "-readonly", "-plist", dmgUrl.path]
+        let out = Pipe()
+        proc.standardOutput = out
+        try proc.run()
+        proc.waitUntilExit()
+        guard proc.terminationStatus == 0 else {
+            throw NSError(domain: "UpdaterError", code: 500, userInfo: nil)
+        }
+        let data = out.fileHandleForReading.readDataToEndOfFile()
+        guard let plist = try? PropertyListSerialization.propertyList(from: data, options: [], format: nil) as? [String: Any],
+              let entities = plist["system-entities"] as? [[String: Any]],
+              let mp = entities.compactMap({ $0["mount-point"] as? String }).first else {
+            throw NSError(domain: "UpdaterError", code: 404, userInfo: nil)
+        }
+        return URL(fileURLWithPath: mp)
     }
     
-    nonisolated private func mountDMG(url: URL) async throws -> URL {
-        try await Task.detached(priority: .background) {
-            let process = Process()
-            process.executableURL = URL(fileURLWithPath: "/usr/bin/hdiutil")
-            process.arguments = ["attach", "-nobrowse", "-readonly", "-plist", url.path]
-            
-            let outputPipe = Pipe()
-            process.standardOutput = outputPipe
-            
-            try process.run()
-            process.waitUntilExit()
-            
-            guard process.terminationStatus == 0 else {
-                throw NSError(domain: "UpdaterError", code: 500, userInfo: [NSLocalizedDescriptionKey: "hdiutil attach 挂载失败，错误码: \(process.terminationStatus)"])
-            }
-            
-            let data = outputPipe.fileHandleForReading.readDataToEndOfFile()
-            
-            // Parse plist output to find mount point
-            if let plist = try? PropertyListSerialization.propertyList(from: data, options: [], format: nil) as? [String: Any],
-               let systemEntities = plist["system-entities"] as? [[String: Any]] {
-                for entity in systemEntities {
-                    if let mountPoint = entity["mount-point"] as? String {
-                        return URL(fileURLWithPath: mountPoint)
-                    }
-                }
-            }
-            
-            // Fallback search in /Volumes
-            let volumesUrl = URL(fileURLWithPath: "/Volumes")
-            let volumes = try FileManager.default.contentsOfDirectory(at: volumesUrl, includingPropertiesForKeys: nil)
-            for volume in volumes {
-                if volume.lastPathComponent.contains("ShellDeck") {
-                    return volume
-                }
-            }
-            
-            throw NSError(domain: "UpdaterError", code: 404, userInfo: [NSLocalizedDescriptionKey: "无法解析 DMG 挂载点"])
-        }.value
-    }
-    
-    nonisolated private func unmountDMG(mountPoint: URL) async throws {
-        try await Task.detached(priority: .background) {
-            let process = Process()
-            process.executableURL = URL(fileURLWithPath: "/usr/bin/hdiutil")
-            process.arguments = ["detach", mountPoint.path, "-force"]
-            try process.run()
-            process.waitUntilExit()
-        }.value
+    nonisolated private static func unmountDMG(mountPoint: URL) throws {
+        let proc = Process()
+        proc.executableURL = URL(fileURLWithPath: "/usr/bin/hdiutil")
+        proc.arguments = ["detach", mountPoint.path, "-force"]
+        try proc.run()
+        proc.waitUntilExit()
     }
     
     private func isVersion(_ v1: String, greaterThan v2: String) -> Bool {

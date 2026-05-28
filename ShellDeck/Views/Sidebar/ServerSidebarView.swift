@@ -488,33 +488,14 @@ struct ServerSidebarView: View {
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
             
-            if updateService.updateAvailable {
-                Text("有新版本")
-                    .font(.system(size: 10, weight: .bold))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 1)
-                    .background(Color.green)
-                    .cornerRadius(8)
-            }
-            
             Spacer()
             
             Button(action: {
                 showSettingsSheet = true
             }) {
-                ZStack(alignment: .topTrailing) {
-                    Image(systemName: "gearshape.fill")
-                        .font(.title3)
-                        .foregroundStyle(.secondary)
-                    
-                    if updateService.updateAvailable {
-                        Circle()
-                            .fill(Color.green)
-                            .frame(width: 8, height: 8)
-                            .offset(x: 3, y: -3)
-                    }
-                }
+                Image(systemName: "gearshape.fill")
+                    .font(.title3)
+                    .foregroundStyle(.secondary)
             }
             .buttonStyle(.plain)
             .help("偏好设置与关于")
