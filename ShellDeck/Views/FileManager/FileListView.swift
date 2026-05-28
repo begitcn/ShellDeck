@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct FileListView: View {
     let sftpService: SFTPService
@@ -16,6 +17,7 @@ struct FileListView: View {
     
     @State private var hoveredItem: SFTPItem.ID? = nil
     @State private var isEditingPath = false
+    @State private var isDropTargeted = false
 
     struct BreadcrumbItem: Identifiable {
         let id = UUID()
@@ -62,6 +64,24 @@ struct FileListView: View {
             Button("取消", role: .cancel) {}
         } message: { item in
             Text("确定要删除「\(item.name)」吗？此操作不可撤销。")
+        }
+        .onDrop(of: [.fileURL], isTargeted: $isDropTargeted) { providers in
+            handleDrop(providers: providers)
+            return true
+        }
+        .overlay {
+            if isDropTargeted {
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(Color.accentColor, lineWidth: 2.5)
+                    .background(Color.accentColor.opacity(0.05))
+                    .padding(4)
+                    .overlay {
+                        Text("拖放文件以上传到 \(currentPath)")
+                            .font(.title3)
+                            .foregroundStyle(Color.accentColor)
+                            .fontWeight(.semibold)
+                    }
+            }
         }
         .onAppear {
             Task { await loadDirectory() }
@@ -349,6 +369,43 @@ struct FileListView: View {
 
     private var viewWindow: NSWindow? {
         NSApplication.shared.keyWindow
+    }
+
+    // MARK: - Drag & Drop
+
+    private func handleDrop(providers: [NSItemProvider]) {
+        for provider in providers {
+            provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, error in
+                guard error == nil else { return }
+                let url: URL?
+                if let data = item as? Data {
+                    url = URL(dataRepresentation: data, relativeTo: nil)
+                } else if let nsurl = item as? URL {
+                    url = nsurl
+                } else {
+                    url = nil
+                }
+                guard let url else { return }
+                Task { @MainActor in
+                    await self.performUpload(url: url)
+                }
+            }
+        }
+    }
+
+    private func performUpload(url: URL) async {
+        let remotePath = currentPath == "/" ? "/\(url.lastPathComponent)" : "\(currentPath)/\(url.lastPathComponent)"
+        let attrs = (try? FileManager.default.attributesOfItem(atPath: url.path)) ?? [:]
+        let fileSize = (attrs[.size] as? UInt64) ?? 0
+        let task = TransferTask(fileName: url.lastPathComponent, type: .upload, totalBytes: fileSize)
+        sftpService.transferTasks.append(task)
+        do {
+            try await sftpService.uploadFile(from: url, to: remotePath, task: task)
+            await loadDirectory()
+        } catch {
+            errorMessage = error.localizedDescription
+            showError = true
+        }
     }
 
     private func performDelete(_ item: SFTPItem) async {
