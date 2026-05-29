@@ -35,6 +35,46 @@ private final class FocusableLocalTerminalView: LocalProcessTerminalView {
     }
 }
 
+private final class LocalTerminalPaddingContainer: NSView {
+    let terminalView: FocusableLocalTerminalView
+    
+    init(terminalView: FocusableLocalTerminalView, padding: CGFloat = 5) {
+        self.terminalView = terminalView
+        super.init(frame: .zero)
+        
+        terminalView.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(terminalView)
+        
+        NSLayoutConstraint.activate([
+            terminalView.topAnchor.constraint(equalTo: topAnchor, constant: padding),
+            terminalView.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -padding),
+            terminalView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: padding),
+            terminalView.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -padding)
+        ])
+    }
+    
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+    
+    override func layout() {
+        super.layout()
+        let bg = terminalView.nativeBackgroundColor
+        self.wantsLayer = true
+        self.layer?.backgroundColor = bg.cgColor
+    }
+    
+    override func draw(_ dirtyRect: NSRect) {
+        let bg = terminalView.nativeBackgroundColor
+        bg.setFill()
+        dirtyRect.fill()
+    }
+    
+    override func mouseDown(with event: NSEvent) {
+        window?.makeFirstResponder(terminalView)
+    }
+}
+
 struct LocalTerminalContainerView: NSViewRepresentable {
     @Environment(LocalTerminalManager.self) var manager
     let session: LocalTerminalSession
@@ -45,7 +85,7 @@ struct LocalTerminalContainerView: NSViewRepresentable {
         Coordinator()
     }
 
-    func makeNSView(context: Context) -> LocalProcessTerminalView {
+    func makeNSView(context: Context) -> NSView {
         let terminal = FocusableLocalTerminalView(frame: .zero)
         terminal.processDelegate = context.coordinator
         context.coordinator.session = session
@@ -70,19 +110,24 @@ struct LocalTerminalContainerView: NSViewRepresentable {
             execName: LocalShellResolver.loginShellName(for: shell)
         )
 
-        return terminal
+        let container = LocalTerminalPaddingContainer(terminalView: terminal)
+        return container
     }
 
-    func updateNSView(_ nsView: LocalProcessTerminalView, context: Context) {
-        if isActive, let window = nsView.window, window.firstResponder != nsView {
+    func updateNSView(_ nsView: NSView, context: Context) {
+        guard let container = nsView as? LocalTerminalPaddingContainer else { return }
+        let terminal = container.terminalView
+        
+        if isActive, let window = terminal.window, window.firstResponder != terminal {
             DispatchQueue.main.async {
-                window.makeFirstResponder(nsView)
+                window.makeFirstResponder(terminal)
             }
         }
     }
 
-    static func dismantleNSView(_ nsView: LocalProcessTerminalView, coordinator: Coordinator) {
-        nsView.terminate()
+    static func dismantleNSView(_ nsView: NSView, coordinator: Coordinator) {
+        guard let container = nsView as? LocalTerminalPaddingContainer else { return }
+        container.terminalView.terminate()
     }
 }
 

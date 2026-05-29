@@ -34,6 +34,46 @@ private final class FocusableTerminalView: TerminalView {
     }
 }
 
+private final class TerminalPaddingContainer: NSView {
+    let terminalView: FocusableTerminalView
+    
+    init(terminalView: FocusableTerminalView, padding: CGFloat = 5) {
+        self.terminalView = terminalView
+        super.init(frame: .zero)
+        
+        terminalView.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(terminalView)
+        
+        NSLayoutConstraint.activate([
+            terminalView.topAnchor.constraint(equalTo: topAnchor, constant: padding),
+            terminalView.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -padding),
+            terminalView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: padding),
+            terminalView.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -padding)
+        ])
+    }
+    
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+    
+    override func layout() {
+        super.layout()
+        let bg = terminalView.nativeBackgroundColor
+        self.wantsLayer = true
+        self.layer?.backgroundColor = bg.cgColor
+    }
+    
+    override func draw(_ dirtyRect: NSRect) {
+        let bg = terminalView.nativeBackgroundColor
+        bg.setFill()
+        dirtyRect.fill()
+    }
+    
+    override func mouseDown(with event: NSEvent) {
+        window?.makeFirstResponder(terminalView)
+    }
+}
+
 struct TerminalContainerView: NSViewRepresentable {
     let viewModel: TerminalViewModel
 
@@ -41,29 +81,34 @@ struct TerminalContainerView: NSViewRepresentable {
         Coordinator()
     }
 
-    func makeNSView(context: Context) -> TerminalView {
+    func makeNSView(context: Context) -> NSView {
         let terminal = FocusableTerminalView(frame: .zero)
         terminal.terminalDelegate = context.coordinator
         TerminalAppearance.apply(to: terminal)
         context.coordinator.connect(viewModel: viewModel, terminal: terminal)
-        return terminal
+        
+        let container = TerminalPaddingContainer(terminalView: terminal)
+        return container
     }
 
-    func updateNSView(_ nsView: TerminalView, context: Context) {
+    func updateNSView(_ nsView: NSView, context: Context) {
+        guard let container = nsView as? TerminalPaddingContainer else { return }
+        let terminal = container.terminalView
+        
         if context.coordinator.viewModel !== viewModel {
             context.coordinator.viewModel?.onOutput = nil
-            nsView.terminal.resetToInitialState()
-            context.coordinator.connect(viewModel: viewModel, terminal: nsView)
+            terminal.terminal.resetToInitialState()
+            context.coordinator.connect(viewModel: viewModel, terminal: terminal)
         }
 
         // When the SSH tab becomes visible again, force a full redraw of the existing buffer.
-        context.coordinator.scheduleDisplayRefresh(for: nsView)
+        context.coordinator.scheduleDisplayRefresh(for: terminal)
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-            context.coordinator.scheduleDisplayRefresh(for: nsView)
+            context.coordinator.scheduleDisplayRefresh(for: terminal)
         }
     }
 
-    static func dismantleNSView(_ nsView: TerminalView, coordinator: Coordinator) {
+    static func dismantleNSView(_ nsView: NSView, coordinator: Coordinator) {
         coordinator.viewModel?.onOutput = nil
     }
 }
