@@ -6,6 +6,7 @@ struct SFTPItem: Identifiable, Hashable {
     let isDirectory: Bool
     let size: UInt64
     let modificationTime: Date?
+    let permissions: String?
 
     var id: String { path }
 }

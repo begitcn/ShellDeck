@@ -13,6 +13,11 @@ final class ServerConnection {
     let terminalViewModel = TerminalViewModel()
     private(set) var sftpService: SFTPService?
     private(set) var monitorService: MonitorService?
+    private(set) var pingMs: Double = 0
+
+    private var reconnectTask: Task<Void, Never>?
+    private var pingTask: Task<Void, Never>?
+    private var cachedServer: Server?
 
     enum State: Equatable {
         case disconnected
@@ -34,7 +39,7 @@ final class ServerConnection {
     init(server: Server) {
         self.serverID = server.id
         self.serverName = server.displayName.isEmpty ? server.host : server.displayName
-        
+        self.cachedServer = server
         setupCallbacks()
     }
 
@@ -43,6 +48,9 @@ final class ServerConnection {
             guard let self else { return }
             Task {
                 await self.disconnect()
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
+                guard let server = self.cachedServer, self.state == .disconnected else { return }
+                await self.connect(to: server)
             }
         }
     }
@@ -50,6 +58,7 @@ final class ServerConnection {
     func connect(to server: Server) async {
         guard state == .disconnected else { return }
         state = .connecting
+        cachedServer = server
 
         do {
             let citadelClient = try await SSHService.connect(to: server)
@@ -58,15 +67,24 @@ final class ServerConnection {
 
             startTerminal()
             setupMonitor()
+            setupPing()
             await setupSFTP()
         } catch let error as SSHError {
+            guard state != .disconnected else { return }
             state = .failed(error.localizedDescription)
         } catch {
+            guard state != .disconnected else { return }
             state = .failed(SSHError.connectionFailed(error).localizedDescription)
         }
     }
 
     func disconnect() async {
+        reconnectTask?.cancel()
+        reconnectTask = nil
+        pingTask?.cancel()
+        pingTask = nil
+        cachedServer = nil
+        pingMs = 0
         terminalViewModel.close()
         monitorService?.stopMonitoring(clearHistory: true)
         monitorService = nil
@@ -99,6 +117,29 @@ final class ServerConnection {
             sftpService = service
         } catch {
             print("[ShellDeck] SFTP 连接失败: \(error)")
+        }
+    }
+
+    // MARK: - Ping
+
+    private func setupPing() {
+        guard client != nil else { return }
+        pingTask?.cancel()
+        pingTask = Task { [weak self] in
+            while !Task.isCancelled {
+                guard let self, let client = self.client else { break }
+                do {
+                    let start = ContinuousClock.now
+                    _ = try await client.executeCommand("echo p")
+                    let elapsed = start.duration(to: ContinuousClock.now)
+                    let sec = Double(elapsed.components.seconds)
+                    let atto = Double(elapsed.components.attoseconds)
+                    self.pingMs = sec * 1000.0 + atto / 1_000_000_000_000_000.0
+                } catch {
+                    self.pingMs = -1
+                }
+                try? await Task.sleep(nanoseconds: 5_000_000_000)
+            }
         }
     }
 }

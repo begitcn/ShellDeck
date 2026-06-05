@@ -76,12 +76,14 @@ final class SFTPService {
                         let fullPath = path == "/" ? "/" + name : path + "/" + name
                         let attrs = component.attributes
                         let isDir = (attrs.permissions.map { ($0 & 0o040000) != 0 }) ?? false
+                        let permString = attrs.permissions.map { self.formatPermissions($0, isDir: isDir) }
                         return SFTPItem(
                             name: name,
                             path: fullPath,
                             isDirectory: isDir,
                             size: attrs.size ?? 0,
-                            modificationTime: attrs.accessModificationTime?.modificationTime
+                            modificationTime: attrs.accessModificationTime?.modificationTime,
+                            permissions: permString
                         )
                     }
             }
@@ -94,6 +96,22 @@ final class SFTPService {
         } catch {
             throw SFTPError.listFailed(error)
         }
+    }
+
+    private func formatPermissions(_ mode: UInt32, isDir: Bool) -> String {
+        let type = isDir ? "d" : "-"
+        let owner = self.permissionString((mode >> 6) & 0o7)
+        let group = self.permissionString((mode >> 3) & 0o7)
+        let other = self.permissionString(mode & 0o7)
+        return "\(type)\(owner)\(group)\(other)"
+    }
+
+    private func permissionString(_ octal: UInt32) -> String {
+        var result = ""
+        result += (octal & 0o4) != 0 ? "r" : "-"
+        result += (octal & 0o2) != 0 ? "w" : "-"
+        result += (octal & 0o1) != 0 ? "x" : "-"
+        return result
     }
 
     func downloadFile(remotePath: String, to localURL: URL) async throws {
@@ -175,6 +193,85 @@ final class SFTPService {
         } catch {
             throw SFTPError.createDirectoryFailed(error)
         }
+    }
+
+    private func ensureRemoteDirectoryExists(at path: String) async throws {
+        guard let client else { throw SFTPError.notConnected }
+        let dirname = (path as NSString).deletingLastPathComponent
+        if dirname != "/" && dirname != "." {
+            try? await client.createDirectory(atPath: dirname)
+        }
+        try await client.createDirectory(atPath: path)
+    }
+
+    func uploadDirectory(from localURL: URL, to remotePath: String, task: TransferTask) async throws {
+        guard let client else { throw SFTPError.notConnected }
+
+        let remoteDir = remotePath.hasSuffix("/") ? String(remotePath.dropLast()) : remotePath
+        try await ensureRemoteDirectoryExists(at: remoteDir)
+
+        let entries = try collectDirectoryEntries(at: localURL)
+
+        task.status = .transferring
+        let transferID = task.id
+        let transfer = Task<Void, Error> {
+            var totalTransferred: UInt64 = 0
+            let totalBytes = entries.reduce(0) { $0 + ($1.isDirectory ? 0 : $1.size) }
+
+            for entry in entries {
+                try Task.checkCancellation()
+                let remoteEntryPath = remoteDir + "/" + entry.relativePath
+
+                if entry.isDirectory {
+                    try? await client.createDirectory(atPath: remoteEntryPath)
+                } else {
+                    let remoteDirPath = (remoteEntryPath as NSString).deletingLastPathComponent
+                    if remoteDirPath != "/" {
+                        try? await client.createDirectory(atPath: remoteDirPath)
+                    }
+
+                    let localFileURL = localURL.appendingPathComponent(entry.relativePath)
+                    let file = try await client.openFile(filePath: remoteEntryPath, flags: [.write, .create, .truncate])
+                    defer { Task { try? await file.close() } }
+
+                    let handle = try FileHandle(forReadingFrom: localFileURL)
+                    defer { try? handle.close() }
+
+                    let chunkSize = 64 * 1024
+                    var offset: UInt64 = 0
+
+                    while true {
+                        try Task.checkCancellation()
+                        let data = try handle.read(upToCount: chunkSize) ?? Data()
+                        guard !data.isEmpty else { break }
+                        try await file.write(ByteBuffer(bytes: data), at: offset)
+                        offset += UInt64(data.count)
+                        await MainActor.run {
+                            totalTransferred += UInt64(data.count)
+                            task.transferredBytes = totalTransferred
+                        }
+                    }
+                }
+            }
+
+            if totalBytes > 0 {
+                await MainActor.run { task.transferredBytes = totalBytes }
+            }
+        }
+
+        activeTransfers[transferID] = transfer
+        do {
+            try await transfer.value
+            task.status = .completed
+        } catch is CancellationError {
+            task.status = .failed("已取消")
+            throw CancellationError()
+        } catch {
+            task.status = .failed(error.localizedDescription)
+            throw SFTPError.uploadFailed(error)
+        }
+        activeTransfers[transferID] = nil
+        cleanupCompletedTasksIfNeeded()
     }
 
     // MARK: - Streaming Transfers
@@ -285,6 +382,26 @@ final class SFTPService {
         }
         activeTransfers[transferID] = nil
         cleanupCompletedTasksIfNeeded()
+    }
+
+    private func collectDirectoryEntries(at url: URL) throws -> [(relativePath: String, isDirectory: Bool, size: UInt64)] {
+        let enumerator = FileManager.default.enumerator(
+            at: url,
+            includingPropertiesForKeys: [.isDirectoryKey, .fileSizeKey],
+            options: [.skipsHiddenFiles, .skipsPackageDescendants]
+        )
+        guard let enumerator else {
+            throw SFTPError.uploadFailed(CocoaError(.fileReadUnknown))
+        }
+        var entries: [(relativePath: String, isDirectory: Bool, size: UInt64)] = []
+        for case let fileURL as URL in enumerator {
+            let resourceValues = try fileURL.resourceValues(forKeys: [.isDirectoryKey, .fileSizeKey])
+            let isDir = resourceValues.isDirectory ?? false
+            let size = resourceValues.fileSize.map(UInt64.init) ?? 0
+            let relativePath = String(fileURL.path.dropFirst(url.path.count + 1))
+            entries.append((relativePath, isDir, size))
+        }
+        return entries
     }
 
     private func cleanupCompletedTasksIfNeeded() {

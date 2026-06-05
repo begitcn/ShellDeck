@@ -9,6 +9,7 @@ enum SSHError: LocalizedError, Equatable {
     case connectionFailed(Error)
     case invalidPrivateKey
     case unsupportedPrivateKeyFormat
+    case encryptedKeyNeedsPassphrase
     case notConnected
 
     var errorDescription: String? {
@@ -17,7 +18,8 @@ enum SSHError: LocalizedError, Equatable {
         case .keychainReadFailed(let error): "Keychain 读取失败: \(error.localizedDescription)"
         case .connectionFailed(let error): "SSH 连接失败: \(error.localizedDescription)"
         case .invalidPrivateKey: "私钥格式无效"
-        case .unsupportedPrivateKeyFormat: "不支持的私钥格式"
+        case .unsupportedPrivateKeyFormat: "不支持的私钥格式或密码短语错误"
+        case .encryptedKeyNeedsPassphrase: "该私钥已加密，请在编辑服务器时填写「私钥密码」"
         case .notConnected: "尚未连接到服务器"
         }
     }
@@ -29,6 +31,7 @@ enum SSHError: LocalizedError, Equatable {
         case (.connectionFailed, .connectionFailed): true
         case (.invalidPrivateKey, .invalidPrivateKey): true
         case (.unsupportedPrivateKeyFormat, .unsupportedPrivateKeyFormat): true
+        case (.encryptedKeyNeedsPassphrase, .encryptedKeyNeedsPassphrase): true
         case (.notConnected, .notConnected): true
         default: false
         }
@@ -74,15 +77,16 @@ enum SSHService {
             } catch {
                 throw SSHError.keychainReadFailed(error)
             }
-            return try parseKey(pem: privateKeyPEM, username: server.username)
+            let passphrase = try? KeychainHelper.read(key: server.id.uuidString + ".passphrase")
+            return try parseKey(pem: privateKeyPEM, username: server.username, passphrase: passphrase)
         }
     }
 
-    private static func parseKey(pem: String, username: String) throws -> SSHAuthenticationMethod {
+    private static func parseKey(pem: String, username: String, passphrase: String? = nil) throws -> SSHAuthenticationMethod {
         let trimmed = pem.trimmingCharacters(in: .whitespacesAndNewlines)
 
         if trimmed.contains("-----BEGIN OPENSSH PRIVATE KEY") {
-            return try parseOpenSSHKey(pem: trimmed, username: username)
+            return try parseOpenSSHKey(pem: trimmed, username: username, passphrase: passphrase)
         }
 
         if trimmed.contains("-----BEGIN RSA PRIVATE KEY") {
@@ -114,9 +118,15 @@ enum SSHService {
 
     // MARK: - OpenSSH Format
 
-    private static func parseOpenSSHKey(pem: String, username: String) throws -> SSHAuthenticationMethod {
-        let key = try parseOpenSSHEd25519(pem: pem)
-        return .ed25519(username: username, privateKey: key)
+    private static func parseOpenSSHKey(pem: String, username: String, passphrase: String? = nil) throws -> SSHAuthenticationMethod {
+        if let key = try? parseOpenSSHEd25519(pem: pem) {
+            return .ed25519(username: username, privateKey: key)
+        }
+        // Encrypted key — check if passphrase was provided
+        if let passphrase, !passphrase.isEmpty {
+            throw SSHError.unsupportedPrivateKeyFormat
+        }
+        throw SSHError.encryptedKeyNeedsPassphrase
     }
 
     private struct OpenSSHReader {

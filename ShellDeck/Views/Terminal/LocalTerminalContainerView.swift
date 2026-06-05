@@ -95,6 +95,9 @@ struct LocalTerminalContainerView: NSViewRepresentable {
                 manager.closeSession(id: sessionID)
             }
         }
+        context.coordinator.onDirectoryUpdate = { [manager, sessionID = session.id] dir in
+            manager.updateWorkingDirectory(id: sessionID, directory: dir)
+        }
         TerminalAppearance.apply(to: terminal)
 
         // Set running state immediately on process start
@@ -104,6 +107,12 @@ struct LocalTerminalContainerView: NSViewRepresentable {
         }
 
         let shell = LocalShellResolver.defaultLoginShell()
+        let shellName = URL(fileURLWithPath: shell).lastPathComponent
+        let homeDir = FileManager.default.homeDirectoryForCurrentUser.path
+        DispatchQueue.main.async {
+            session.shellType = shellName
+            session.workingDirectory = abbreviateHome(homeDir)
+        }
         terminal.startProcess(
             executable: shell,
             environment: LocalShellResolver.environment(for: shell),
@@ -128,6 +137,14 @@ struct LocalTerminalContainerView: NSViewRepresentable {
     static func dismantleNSView(_ nsView: NSView, coordinator: Coordinator) {
         guard let container = nsView as? LocalTerminalPaddingContainer else { return }
         container.terminalView.terminate()
+    }
+
+    private func abbreviateHome(_ path: String) -> String {
+        let homeDir = FileManager.default.homeDirectoryForCurrentUser.path
+        if path.hasPrefix(homeDir) {
+            return "~" + String(path.dropFirst(homeDir.count))
+        }
+        return path
     }
 }
 
@@ -210,6 +227,7 @@ extension LocalTerminalContainerView {
         var session: LocalTerminalSession?
         var isRunningBinding: Binding<Bool>?
         var onProcessTerminated: (() -> Void)?
+        var onDirectoryUpdate: ((String) -> Void)?
 
         func processTerminated(source: TerminalView, exitCode: Int32?) {
             Task { @MainActor in
@@ -230,6 +248,9 @@ extension LocalTerminalContainerView {
             }
         }
 
-        func hostCurrentDirectoryUpdate(source: TerminalView, directory: String?) {}
+        func hostCurrentDirectoryUpdate(source: TerminalView, directory: String?) {
+            guard let dir = directory else { return }
+            onDirectoryUpdate?(dir)
+        }
     }
 }

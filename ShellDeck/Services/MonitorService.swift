@@ -5,12 +5,20 @@ import NIOCore
 
 enum MonitorError: LocalizedError {
     case commandFailed(String)
+    case unsupportedPlatform(String)
 
     var errorDescription: String? {
         switch self {
         case .commandFailed(let msg): return "监控命令执行失败: \(msg)"
+        case .unsupportedPlatform(let os): return "不支持的服务器系统: \(os)"
         }
     }
+}
+
+private enum OSPlatform: String {
+    case linux = "Linux"
+    case macOS = "Darwin"
+    case unknown
 }
 
 @MainActor
@@ -23,17 +31,20 @@ final class MonitorService {
 
     private var monitoringTask: Task<Void, Never>?
     private weak var client: SSHClient?
+    private var platform: OSPlatform = .unknown
 
     private let maxHistory = 20
     private let pollInterval: UInt64 = 3_000_000_000
 
     func setup(client: SSHClient) {
         self.client = client
+        self.platform = .unknown
     }
 
     func startMonitoring(client: SSHClient? = nil) {
         if let client = client {
             self.client = client
+            self.platform = .unknown
         }
         guard self.client != nil else { return }
         stopMonitoring(clearHistory: false)
@@ -41,7 +52,11 @@ final class MonitorService {
         monitoringTask = Task { [weak self] in
             while !Task.isCancelled {
                 guard let self = self, self.client != nil else { break }
-                
+
+                if self.platform == .unknown {
+                    self.platform = (try? await self.detectOS()) ?? .unknown
+                }
+
                 do {
                     try await self.pollDisk()
                 } catch {
@@ -92,6 +107,15 @@ final class MonitorService {
         buffer.getString(at: buffer.readerIndex, length: buffer.readableBytes)
     }
 
+    private func detectOS() async throws -> OSPlatform {
+        guard let client else { return .unknown }
+        let output = try await client.executeCommand("uname -s")
+        guard let text = bufferToString(output)?.trimmingCharacters(in: .whitespacesAndNewlines) else {
+            return .unknown
+        }
+        return OSPlatform(rawValue: text) ?? .unknown
+    }
+
     // MARK: - Disk
 
     private func pollDisk() async throws {
@@ -114,6 +138,17 @@ final class MonitorService {
     // MARK: - Memory
 
     private func pollMemory() async throws -> Double {
+        switch platform {
+        case .macOS:
+            return try await pollMemoryMacOS()
+        case .linux:
+            return try await pollMemoryLinux()
+        case .unknown:
+            throw MonitorError.unsupportedPlatform("unknown")
+        }
+    }
+
+    private func pollMemoryLinux() async throws -> Double {
         guard let client else { return 0 }
         let output = try await client.executeCommand("cat /proc/meminfo")
         guard let text = bufferToString(output).flatMap({ $0.isEmpty ? nil : $0 }) else {
@@ -133,9 +168,30 @@ final class MonitorService {
         return ((memTotal - memAvailable) / memTotal) * 100.0
     }
 
+    private func pollMemoryMacOS() async throws -> Double {
+        guard let client else { return 0 }
+        let output = try await client.executeCommand("memory_pressure 2>/dev/null | grep \"System-wide memory free percentage:\" | awk '{print 100 - $5}'")
+        guard let text = bufferToString(output)?.trimmingCharacters(in: .whitespacesAndNewlines),
+              let value = Double(text), value >= 0 else {
+            throw MonitorError.commandFailed("memory_pressure 解析失败")
+        }
+        return value
+    }
+
     // MARK: - CPU
 
     private func pollCPU() async throws -> Double {
+        switch platform {
+        case .macOS:
+            return try await pollCPUMacOS()
+        case .linux:
+            return try await pollCPULinux()
+        case .unknown:
+            throw MonitorError.unsupportedPlatform("unknown")
+        }
+    }
+
+    private func pollCPULinux() async throws -> Double {
         let stats1 = try await readCpuStats()
         try await Task.sleep(nanoseconds: 200_000_000)
         let stats2 = try await readCpuStats()
@@ -157,6 +213,21 @@ final class MonitorService {
         let vals = firstLine.split(whereSeparator: \.isWhitespace).dropFirst().compactMap { UInt64($0) }
         guard vals.count >= 4 else { throw MonitorError.commandFailed("stat 字段不足") }
         return (vals[3], vals.reduce(0, +))
+    }
+
+    private func pollCPUMacOS() async throws -> Double {
+        guard let client else { return 0 }
+        let coresOutput = try await client.executeCommand("sysctl -n hw.logicalcpu 2>/dev/null")
+        let coresText = bufferToString(coresOutput)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard let cores = Double(coresText), cores > 0 else {
+            throw MonitorError.commandFailed("macOS 获取 CPU 核心数失败")
+        }
+        let cpuOutput = try await client.executeCommand("ps -A -o %cpu 2>/dev/null | awk '{s+=$1} END {printf \"%.1f\\n\", s}'")
+        let cpuText = bufferToString(cpuOutput)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard let totalCPU = Double(cpuText) else {
+            throw MonitorError.commandFailed("macOS CPU 使用率解析失败")
+        }
+        return min(totalCPU / cores, 100.0)
     }
 
     // MARK: - Trimming

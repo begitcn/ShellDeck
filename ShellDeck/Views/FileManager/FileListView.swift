@@ -18,6 +18,7 @@ struct FileListView: View {
     @State private var hoveredItem: SFTPItem.ID? = nil
     @State private var isEditingPath = false
     @State private var isDropTargeted = false
+    @State private var showHiddenFiles = false
 
     struct BreadcrumbItem: Identifiable {
         let id = UUID()
@@ -36,10 +37,15 @@ struct FileListView: View {
         return breadcrumbs
     }
 
+    private var filteredItems: [SFTPItem] {
+        showHiddenFiles ? items : items.filter { !$0.name.hasPrefix(".") }
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             toolbar
             Divider()
+            dropZoneHint
             TransferProgressView(
                 tasks: sftpService.transferTasks,
                 onDismissCompleted: { sftpService.dismissCompletedTasks() },
@@ -69,18 +75,20 @@ struct FileListView: View {
             handleDrop(providers: providers)
             return true
         }
-        .overlay {
+        .safeAreaInset(edge: .top, spacing: 0) {
             if isDropTargeted {
-                RoundedRectangle(cornerRadius: 8)
-                    .stroke(Color.accentColor, lineWidth: 2.5)
-                    .background(Color.accentColor.opacity(0.05))
-                    .padding(4)
-                    .overlay {
-                        Text("拖放文件以上传到 \(currentPath)")
-                            .font(.title3)
-                            .foregroundStyle(Color.accentColor)
-                            .fontWeight(.semibold)
-                    }
+                HStack(spacing: 6) {
+                    Image(systemName: "arrow.down.doc.fill")
+                        .foregroundStyle(Color.accentColor)
+                    Text("释放以上传到 \(currentPath)")
+                        .font(.callout)
+                        .foregroundStyle(Color.accentColor)
+                }
+                .fontWeight(.medium)
+                .padding(8)
+                .frame(maxWidth: .infinity)
+                .background(Color.accentColor.opacity(0.08))
+                .transition(.move(edge: .top).combined(with: .opacity))
             }
         }
         .onAppear {
@@ -99,6 +107,27 @@ struct FileListView: View {
     }
 
     // MARK: - Toolbar
+
+    private var dropZoneHint: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "arrow.down.doc")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+            Text("拖放文件或文件夹到此处上传")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 6)
+        .background(
+            ZStack {
+                RoundedRectangle(cornerRadius: 6)
+                    .strokeBorder(.quaternary, style: StrokeStyle(lineWidth: 1.5, dash: [4, 4]))
+            }
+        )
+        .padding(.horizontal, 10)
+        .padding(.vertical, 4)
+    }
 
     @ViewBuilder
     private var toolbar: some View {
@@ -171,6 +200,12 @@ struct FileListView: View {
             .buttonStyle(.plain)
             .help("刷新")
 
+            Button(action: { showHiddenFiles.toggle() }) {
+                Image(systemName: showHiddenFiles ? "eye" : "eye.slash")
+            }
+            .buttonStyle(.plain)
+            .help(showHiddenFiles ? "隐藏隐藏文件" : "显示隐藏文件")
+
             Button(action: uploadFile) {
                 Image(systemName: "plus")
                     .fontWeight(.semibold)
@@ -200,7 +235,7 @@ struct FileListView: View {
 
     @ViewBuilder
     private var content: some View {
-        if items.isEmpty && !isLoading {
+        if filteredItems.isEmpty && !isLoading {
             ContentUnavailableView(
                 "空目录",
                 systemImage: "folder",
@@ -208,48 +243,100 @@ struct FileListView: View {
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
-            ScrollView {
-                LazyVStack(spacing: 0) {
-                    ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
-                        rowView(item: item, index: index)
-                        Divider()
-                            .padding(.leading, 28)
+            VStack(spacing: 0) {
+                fileGridHeader
+                ScrollView {
+                    LazyVStack(spacing: 0) {
+                        ForEach(Array(filteredItems.enumerated()), id: \.element.id) { index, item in
+                            rowView(item: item, index: index)
+                            Divider()
+                                .padding(.leading, 28)
+                        }
                     }
                 }
+                activeTransferBar
             }
         }
     }
 
+    // MARK: - Grid Header
+
+    private var fileGridHeader: some View {
+        HStack(spacing: 0) {
+            HStack(spacing: 8) {
+                Image(systemName: "folder")
+                    .frame(width: 16)
+                    .hidden()
+                Text("名称")
+                    .font(.caption)
+                    .fontWeight(.semibold)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.leading, 10)
+
+            Text("大小")
+                .font(.caption)
+                .fontWeight(.semibold)
+                .frame(width: 80, alignment: .trailing)
+
+            Text("修改日期")
+                .font(.caption)
+                .fontWeight(.semibold)
+                .frame(width: 150, alignment: .leading)
+                .padding(.leading, 8)
+
+            Text("权限")
+                .font(.caption)
+                .fontWeight(.semibold)
+                .frame(width: 90, alignment: .leading)
+                .padding(.leading, 8)
+        }
+        .foregroundStyle(.tertiary)
+        .padding(.vertical, 6)
+        .padding(.trailing, 10)
+        .background(Color.primary.opacity(0.02))
+    }
+
+    // MARK: - Row
+
     private func rowView(item: SFTPItem, index: Int) -> some View {
         let isSelected = selectedItem == item.id
-        return HStack(spacing: 8) {
-            Image(systemName: item.isDirectory ? "folder.fill" : "doc.text")
-                .foregroundStyle(item.isDirectory ? Color.accentColor : .secondary)
-                .frame(width: 20)
+        return HStack(spacing: 0) {
+            HStack(spacing: 8) {
+                Image(systemName: item.isDirectory ? "folder.fill" : "doc.text")
+                    .foregroundStyle(item.isDirectory ? Color.accentColor : .secondary)
+                    .frame(width: 16)
 
-            Text(item.name)
-                .font(.body)
-                .fontWeight(item.isDirectory ? .medium : .regular)
-                .lineLimit(1)
-
-            Spacer()
+                Text(item.name)
+                    .font(.callout)
+                    .fontWeight(item.isDirectory ? .medium : .regular)
+                    .lineLimit(1)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.leading, 10)
 
             Text(item.isDirectory ? "—" : formattedSize(item.size))
-                .font(.body.monospacedDigit())
+                .font(.callout.monospacedDigit())
                 .foregroundStyle(.secondary)
                 .frame(width: 80, alignment: .trailing)
 
             Text(item.modificationTime.map(formattedDate) ?? "—")
-                .font(.body)
+                .font(.callout)
                 .foregroundStyle(.secondary)
-                .frame(width: 160, alignment: .leading)
+                .frame(width: 150, alignment: .leading)
+                .padding(.leading, 8)
+
+            Text(item.permissions ?? "—")
+                .font(.caption.monospaced())
+                .foregroundStyle(.tertiary)
+                .frame(width: 90, alignment: .leading)
+                .padding(.leading, 8)
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 5)
+        .padding(.vertical, 4)
+        .padding(.trailing, 10)
         .background(
-            RoundedRectangle(cornerRadius: 6)
-                .fill(isSelected ? Color.accentColor.opacity(0.15) : (hoveredItem == item.id ? Color.primary.opacity(0.05) : (index % 2 == 1 ? Color.primary.opacity(0.015) : Color.clear)))
-                .padding(.horizontal, 2)
+            RoundedRectangle(cornerRadius: 4)
+                .fill(isSelected ? Color.accentColor.opacity(0.12) : (hoveredItem == item.id ? Color.primary.opacity(0.04) : (index % 2 == 0 ? Color.primary.opacity(0.015) : Color.clear)))
         )
         .contentShape(Rectangle())
         .onHover { isHovered in
@@ -276,6 +363,44 @@ struct FileListView: View {
                 itemToDelete = item
                 showDeleteConfirmation = true
             }
+        }
+    }
+
+    // MARK: - Active Transfer Bar
+
+    @ViewBuilder
+    private var activeTransferBar: some View {
+        if let activeTask = sftpService.transferTasks.first(where: { !$0.isTerminalStatus }) {
+            VStack(spacing: 4) {
+                Divider()
+                HStack(spacing: 8) {
+                    Image(systemName: "arrow.up.doc.fill")
+                        .font(.caption)
+                        .foregroundStyle(Color.accentColor)
+                    Text(activeTask.fileName)
+                        .font(.caption)
+                        .fontWeight(.medium)
+                    Spacer()
+                    if activeTask.totalBytes > 0 {
+                        Text("\(String(format: "%.0f", activeTask.progress * 100))%")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Text("\(formattedSize(activeTask.transferredBytes)) / \(formattedSize(activeTask.totalBytes))")
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 4)
+                if activeTask.totalBytes > 0 {
+                    ProgressView(value: activeTask.progress)
+                        .progressViewStyle(.linear)
+                        .tint(Color.accentColor)
+                        .padding(.horizontal, 12)
+                        .padding(.bottom, 4)
+                }
+            }
+            .background(Color.primary.opacity(0.02))
         }
     }
 
@@ -343,27 +468,12 @@ struct FileListView: View {
     private func uploadFile() {
         let panel = NSOpenPanel()
         panel.canChooseFiles = true
-        panel.canChooseDirectories = false
+        panel.canChooseDirectories = true
         panel.allowsMultipleSelection = false
         guard let window = viewWindow else { return }
         panel.beginSheetModal(for: window) { response in
             guard response == .OK, let url = panel.url else { return }
-            let remotePath = self.currentPath == "/" ? "/\(url.lastPathComponent)" : "\(self.currentPath)/\(url.lastPathComponent)"
-            let attrs = (try? FileManager.default.attributesOfItem(atPath: url.path)) ?? [:]
-            let fileSize = (attrs[.size] as? UInt64) ?? 0
-            let task = TransferTask(fileName: url.lastPathComponent, type: .upload, totalBytes: fileSize)
-            self.sftpService.transferTasks.append(task)
-            Task {
-                do {
-                    try await self.sftpService.uploadFile(from: url, to: remotePath, task: task)
-                    await self.loadDirectory()
-                } catch {
-                    await MainActor.run {
-                        self.errorMessage = error.localizedDescription
-                        self.showError = true
-                    }
-                }
-            }
+            Task { await self.performUpload(url: url) }
         }
     }
 
@@ -395,16 +505,31 @@ struct FileListView: View {
 
     private func performUpload(url: URL) async {
         let remotePath = currentPath == "/" ? "/\(url.lastPathComponent)" : "\(currentPath)/\(url.lastPathComponent)"
-        let attrs = (try? FileManager.default.attributesOfItem(atPath: url.path)) ?? [:]
-        let fileSize = (attrs[.size] as? UInt64) ?? 0
-        let task = TransferTask(fileName: url.lastPathComponent, type: .upload, totalBytes: fileSize)
-        sftpService.transferTasks.append(task)
-        do {
-            try await sftpService.uploadFile(from: url, to: remotePath, task: task)
-            await loadDirectory()
-        } catch {
-            errorMessage = error.localizedDescription
-            showError = true
+        var isDirectory: ObjCBool = false
+        FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory)
+
+        if isDirectory.boolValue {
+            let task = TransferTask(fileName: url.lastPathComponent, type: .upload, totalBytes: 0)
+            sftpService.transferTasks.append(task)
+            do {
+                try await sftpService.uploadDirectory(from: url, to: remotePath, task: task)
+                await loadDirectory()
+            } catch {
+                errorMessage = error.localizedDescription
+                showError = true
+            }
+        } else {
+            let attrs = (try? FileManager.default.attributesOfItem(atPath: url.path)) ?? [:]
+            let fileSize = (attrs[.size] as? UInt64) ?? 0
+            let task = TransferTask(fileName: url.lastPathComponent, type: .upload, totalBytes: fileSize)
+            sftpService.transferTasks.append(task)
+            do {
+                try await sftpService.uploadFile(from: url, to: remotePath, task: task)
+                await loadDirectory()
+            } catch {
+                errorMessage = error.localizedDescription
+                showError = true
+            }
         }
     }
 

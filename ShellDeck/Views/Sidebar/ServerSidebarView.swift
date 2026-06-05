@@ -1,36 +1,21 @@
 import SwiftUI
 import SwiftData
 
-enum SidebarMode: String, CaseIterable, Identifiable {
-    case local = "本地终端"
-    case ssh = "SSH 服务器"
-
-    var id: String { rawValue }
-
-    var icon: String {
-        switch self {
-        case .ssh: return "server.rack"
-        case .local: return "terminal"
-        }
-    }
-}
-
 struct ServerSidebarView: View {
     @Query(sort: \ServerGroup.name) var groups: [ServerGroup]
     @Query(sort: \Server.displayName) var servers: [Server]
     @Environment(\.modelContext) private var modelContext
-    @Binding var selection: Server?
-    @Binding var sidebarMode: SidebarMode
-    @Binding var localSelection: UUID?
+    @Binding var selection: SidebarItem?
     let localManager: LocalTerminalManager
     let connectionStates: [UUID: ServerConnection.State]
     let onConnect: (Server) -> Void
     let onDisconnect: (Server) -> Void
+    let onNewLocalSession: () -> Void
 
     @AppStorage("appTheme") private var appTheme: String = AppTheme.dark.rawValue
 
-    @State private var updateService = UpdateService.shared
     @State private var showSettingsSheet = false
+    @State private var searchText = ""
 
     @State private var showAddSheet = false
     @State private var showDeleteConfirmation = false
@@ -53,19 +38,21 @@ struct ServerSidebarView: View {
 
     private let ungroupedSectionID = UUID(uuidString: "00000000-0000-0000-0000-000000000000")!
 
+    private var filteredServers: [Server] {
+        searchText.isEmpty ? servers : servers.filter { s in
+            s.displayName.localizedCaseInsensitiveContains(searchText) ||
+            s.host.localizedCaseInsensitiveContains(searchText) ||
+            s.username.localizedCaseInsensitiveContains(searchText)
+        }
+    }
+
     var body: some View {
         VStack(spacing: 0) {
-            modePicker
-            Divider()
-            if sidebarMode == .ssh {
-                sshContent
-            } else {
-                localContent
-            }
-            Divider()
-            themeFooterView
+            actionBar
+            searchBar
+            unifiedList
         }
-        .navigationTitle(sidebarMode == .ssh ? "服务器" : "本地终端")
+        .navigationTitle("")
         .toolbar { toolbarContent }
         .sheet(isPresented: $showAddSheet) { AddServerView() }
         .sheet(item: $editingServer) { server in AddServerView(server: server) }
@@ -75,7 +62,7 @@ struct ServerSidebarView: View {
         .sheet(isPresented: $showSettingsSheet) { SettingsView() }
         .confirmationDialog("确认删除", isPresented: $showDeleteConfirmation, presenting: serverToDelete)
         { server in
-            Button("删除", role: .destructive) { deleteServer(server); if selection?.id == server.id { selection = nil } }
+            Button("删除", role: .destructive) { deleteServer(server); if case .server(let id) = selection, id == server.id { selection = nil } }
             Button("取消", role: .cancel) {}
         } message: { server in
             Text("确定要删除「\(server.displayName.isEmpty ? server.host : server.displayName)」吗？此操作不可撤销。")
@@ -89,185 +76,307 @@ struct ServerSidebarView: View {
         }
     }
 
-    // MARK: - Mode Picker
+    // MARK: - Action Bar
 
-    private var modePicker: some View {
-        Picker("", selection: $sidebarMode) {
-            ForEach(SidebarMode.allCases) { mode in
-                Label(mode.rawValue, systemImage: mode.icon).tag(mode)
+    private var actionBar: some View {
+        HStack(spacing: 6) {
+            Text("ShellDeck")
+                .font(.headline)
+                .fontWeight(.bold)
+                .foregroundStyle(.primary)
+            Spacer()
+            Button {
+                showSettingsSheet = true
+            } label: {
+                Image(systemName: "gearshape")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
             }
+            .buttonStyle(.plain)
+            .help("偏好设置")
+            Menu {
+                Button("服务器", systemImage: "server.rack") { showAddSheet = true }
+                Button("分组", systemImage: "folder") { showAddGroupSheet = true }
+                Divider()
+                Button("本地终端", systemImage: "terminal") { onNewLocalSession() }
+            } label: {
+                Image(systemName: "plus")
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(.white)
+                    .padding(4)
+                    .background(Color.accentColor)
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+            }
+            .buttonStyle(.plain)
+            .help("新建会话")
         }
-        .pickerStyle(.segmented)
-        .labelsHidden()
         .padding(.horizontal, 12)
-        .padding(.vertical, 10)
+        .padding(.vertical, 8)
     }
 
-    // MARK: - SSH Content
+    // MARK: - Search
 
-    private var sshContent: some View {
+    private var searchBar: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(.tertiary)
+                .font(.caption)
+            TextField("搜索服务器或终端...", text: $searchText)
+                .textFieldStyle(.plain)
+                .font(.callout)
+            if !searchText.isEmpty {
+                Button { searchText = "" } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.tertiary)
+                        .font(.caption)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(7)
+        .background(.quaternary.opacity(0.5))
+        .clipShape(RoundedRectangle(cornerRadius: 6))
+        .overlay(
+            RoundedRectangle(cornerRadius: 6)
+                .stroke(.quaternary, lineWidth: 0.5)
+        )
+        .padding(.horizontal, 10)
+        .padding(.bottom, 4)
+    }
+
+    // MARK: - Unified List
+
+    private var unifiedList: some View {
         List(selection: $selection) {
+            // === SSH Server Groups ===
             if groups.isEmpty {
                 flatList
             } else {
                 groupedList
                 ungroupedSection
             }
+
+            // === Local Terminal Section ===
+            localTerminalSection
         }
+        .listStyle(.sidebar)
         .overlay { emptyOverlay }
     }
 
-    // MARK: - Local Content
-
-    private var localContent: some View {
-        List(selection: $localSelection) {
-            ForEach(localManager.sessions) { session in
-                HStack(spacing: 10) {
-                    Image(systemName: "terminal.fill")
-                        .foregroundStyle(.green)
-                        .imageScale(.medium)
-                    
-                    Text(session.title)
-                        .font(.body)
-                        .fontWeight(.medium)
-                        .foregroundStyle(.primary)
-                    
-                    Spacer()
-                    
-                    // Trailing close button
-                    Button(action: {
-                        withAnimation {
-                            localManager.closeSession(id: session.id)
-                        }
-                    }) {
-                        Image(systemName: "xmark")
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundStyle(.secondary)
-                            .padding(4)
-                            .background(Color.primary.opacity(0.06))
-                            .clipShape(Circle())
-                    }
-                    .buttonStyle(.borderless)
-                    .help("关闭终端")
-                }
-                .padding(.vertical, 4)
-                .contentShape(Rectangle())
-                .tag(session.id as UUID?)
-                .contextMenu {
-                    Button("重命名", systemImage: "pencil") {
-                        localSessionToRename = session
-                        renameLocalTitle = session.title
-                        showRenameLocalSheet = true
-                    }
-                    Divider()
-                    Button("关闭", role: .destructive) {
-                        withAnimation {
-                            localManager.closeSession(id: session.id)
-                        }
-                    }
-                }
-            }
-        }
-        .overlay {
-            localManager.sessions.isEmpty
-                ? AnyView(ContentUnavailableView(
-                    "没有终端",
-                    systemImage: "terminal",
-                    description: Text("点击 + 新建本地终端")
-                ))
-                : AnyView(EmptyView())
-        }
-    }
-
-    // MARK: - Sub-views (SSH)
+    // MARK: - SSH Servers
 
     private var flatList: some View {
-        ForEach(servers) { server in
+        let items = filteredServers
+        return ForEach(items) { server in
             serverRow(server)
-                .tag(server)
+                .tag(SidebarItem.server(server.id))
                 .contextMenu { contextMenuItems(for: server) }
         }
     }
 
     private var groupedList: some View {
-        ForEach(groups) { group in
-            let groupServers = servers.filter { $0.group?.id == group.id }
-            Section {
-                if expandedGroups.contains(group.id) {
-                    ForEach(groupServers) { server in
-                        serverRow(server)
-                            .tag(server)
-                            .contextMenu { contextMenuItems(for: server) }
+        let displayedGroups = groups
+        return ForEach(displayedGroups) { group in
+            let groupServers = filteredServers.filter { $0.group?.id == group.id }
+            if !groupServers.isEmpty || filteredServers.isEmpty {
+                Section {
+                    if expandedGroups.contains(group.id) {
+                        ForEach(groupServers) { server in
+                            serverRow(server)
+                                .tag(SidebarItem.server(server.id))
+                                .contextMenu { contextMenuItems(for: server) }
+                                .padding(.leading, 12)
+                        }
                     }
+                } header: {
+                    coloredSectionHeader(name: group.name, isExpanded: expandedGroups.contains(group.id))
+                        .contextMenu { groupContextMenuItems(for: group) }
+                        .onTapGesture { toggleGroup(group.id) }
                 }
-            } header: {
-                sectionHeader(name: group.name, isExpanded: expandedGroups.contains(group.id))
-                    .contextMenu { groupContextMenuItems(for: group) }
-                    .onTapGesture { toggleGroup(group.id) }
             }
         }
     }
 
     @ViewBuilder
     private var ungroupedSection: some View {
-        let ungroupedServers = servers.filter { $0.group == nil }
+        let ungroupedServers = filteredServers.filter { $0.group == nil }
         if !ungroupedServers.isEmpty {
             Section {
                 if expandedGroups.contains(ungroupedSectionID) {
                     ForEach(ungroupedServers) { server in
                         serverRow(server)
-                            .tag(server)
+                            .tag(SidebarItem.server(server.id))
                             .contextMenu { contextMenuItems(for: server) }
+                            .padding(.leading, 12)
                     }
                 }
             } header: {
-                sectionHeader(name: "未分组", isExpanded: expandedGroups.contains(ungroupedSectionID))
+                coloredSectionHeader(name: "未分组", isExpanded: expandedGroups.contains(ungroupedSectionID), color: .gray)
                     .onTapGesture { toggleGroup(ungroupedSectionID) }
             }
         }
     }
 
+    // MARK: - Local Terminal Section
+
+    @ViewBuilder
+    private var localTerminalSection: some View {
+        let items = localManager.sessions
+        Section {
+            if expandedGroups.contains(localTerminalSectionID) {
+                ForEach(items) { session in
+                    localTerminalRow(session)
+                        .tag(SidebarItem.local(session.id))
+                }
+            }
+        } header: {
+            HStack(spacing: 4) {
+                Image(systemName: expandedGroups.contains(localTerminalSectionID) ? "chevron.down" : "chevron.right")
+                    .foregroundStyle(.tertiary)
+                    .font(.caption2)
+                    .frame(width: 8)
+                Text("本地终端")
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(.primary)
+                if !items.isEmpty {
+                    Text("\(items.count)")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                        .padding(.horizontal, 5)
+                        .background(.quaternary)
+                        .clipShape(Capsule())
+                }
+                Spacer()
+                Button { onNewLocalSession() } label: {
+                    Image(systemName: "plus")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
+                .buttonStyle(.plain)
+                .help("新建本地终端")
+            }
+            .padding(.vertical, 3)
+            .padding(.horizontal, 6)
+            .background(alignment: .leading) {
+                RoundedRectangle(cornerRadius: 1.5)
+                    .fill(.purple)
+                    .frame(width: 2.5)
+                    .padding(.vertical, 4)
+            }
+            .padding(.horizontal, 2)
+            .padding(.top, 4)
+            .background(alignment: .top) {
+                Divider()
+                    .padding(.top, 2)
+            }
+            .contentShape(Rectangle())
+            .onTapGesture { toggleGroup(localTerminalSectionID) }
+        }
+    }
+
+    private let localTerminalSectionID = UUID()
+
+    private func localTerminalRow(_ session: LocalTerminalSession) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: "terminal.fill")
+                .foregroundStyle(.purple)
+                .font(.caption)
+                .frame(width: 16)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(session.title)
+                    .font(.callout)
+                    .fontWeight(.medium)
+                HStack(spacing: 4) {
+                    Text("\(session.shellType) · \(session.workingDirectory)")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(1)
+                }
+            }
+            Spacer()
+            Button {
+                withAnimation { localManager.closeSession(id: session.id) }
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 8, weight: .bold))
+                    .foregroundStyle(.tertiary)
+                    .padding(3)
+                    .background(.quaternary)
+                    .clipShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .help("关闭终端")
+        }
+        .padding(.vertical, 3)
+        .contentShape(Rectangle())
+        .contextMenu {
+            Button("重命名", systemImage: "pencil") {
+                localSessionToRename = session
+                renameLocalTitle = session.title
+                showRenameLocalSheet = true
+            }
+            Divider()
+            Button("关闭", role: .destructive) {
+                withAnimation { localManager.closeSession(id: session.id) }
+            }
+        }
+    }
+
+    @ViewBuilder
     private var emptyOverlay: some View {
-        servers.isEmpty
-            ? AnyView(ContentUnavailableView("没有服务器", systemImage: "server.rack",
-                description: Text("点击 + 添加你的第一台服务器")))
-            : AnyView(EmptyView())
+        if filteredServers.isEmpty && localManager.sessions.isEmpty {
+            ContentUnavailableView("没有会话", systemImage: "terminal",
+                description: Text("添加服务器或新建本地终端"))
+        }
     }
 
     // MARK: - Toolbar
 
     private var toolbarContent: some ToolbarContent {
-        ToolbarItemGroup {
-            if sidebarMode == .ssh {
-                if let selection, let server = servers.first(where: { $0.id == selection.id }) {
-                    Button { editingServer = server } label: { Label("编辑", systemImage: "pencil") }
-                    Button(role: .destructive) { serverToDelete = server; showDeleteConfirmation = true }
-                        label: { Label("删除", systemImage: "trash") }
-                }
-                Menu {
-                    Button("服务器", systemImage: "server.rack") { showAddSheet = true }
-                    Button("分组", systemImage: "folder") { showAddGroupSheet = true }
-                } label: { Label("添加", systemImage: "plus") }
-            } else {
-                Button { localManager.createSession() } label: { Label("新建终端", systemImage: "plus") }
-            }
-        }
+        ToolbarItemGroup {}
     }
 
-    // MARK: - Section Header
+    // MARK: - Colored Section Header
 
-    private func sectionHeader(name: String, isExpanded: Bool) -> some View {
-        HStack(spacing: 4) {
+    private func coloredSectionHeader(name: String, isExpanded: Bool, color: Color? = nil) -> some View {
+        let resolvedColor = color ?? groupColor(for: name)
+        return HStack(spacing: 4) {
             Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-                .foregroundStyle(.secondary)
-                .font(.caption)
+                .foregroundStyle(.tertiary)
+                .font(.caption2)
                 .frame(width: 8)
-            Image(systemName: "folder")
-                .foregroundStyle(.secondary)
             Text(name)
-                .font(.headline)
+                .font(.subheadline)
+                .fontWeight(.semibold)
+                .foregroundStyle(.primary)
+            Spacer()
         }
+        .padding(.vertical, 3)
+        .padding(.horizontal, 6)
+        .background(alignment: .leading) {
+            RoundedRectangle(cornerRadius: 1.5)
+                .fill(resolvedColor)
+                .frame(width: 2.5)
+                .padding(.vertical, 4)
+        }
+        .padding(.horizontal, 2)
         .contentShape(Rectangle())
+    }
+
+    private func groupColor(for name: String) -> Color {
+        let lower = name.lowercased()
+        if lower.contains("生产") || lower.contains("prod") || lower.contains("prd") {
+            return .red
+        } else if lower.contains("预发布") || lower.contains("staging") || lower.contains("stage") || lower.contains("uat") {
+            return .orange
+        } else if lower.contains("开发") || lower.contains("dev") || lower.contains("test") || lower.contains("测试") {
+            return .green
+        } else if lower.contains("个人") || lower.contains("personal") || lower.contains("home") {
+            return .blue
+        }
+        return Color.accentColor
     }
 
     // MARK: - Group Toggle
@@ -366,23 +475,29 @@ struct ServerSidebarView: View {
     private func serverRow(_ server: Server) -> some View {
         HStack(spacing: 8) {
             statusDot(for: server)
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 1) {
                 Text(server.displayName.isEmpty ? server.host : server.displayName)
-                    .font(.headline)
+                    .font(.callout)
+                    .fontWeight(.medium)
                 HStack(spacing: 4) {
-                    Image(systemName: server.authTypeEnum == .password ? "key.fill" : "lock.fill")
-                        .foregroundStyle(.secondary)
                     Text("\(server.username)@\(server.host):\(server.port)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
                 }
             }
             Spacer()
+            Text(server.authTypeEnum == .privateKey ? "KEY" : "SSH")
+                .font(.system(size: 9, weight: .medium))
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 5)
+                .padding(.vertical, 2)
+                .background(.quaternary)
+                .clipShape(RoundedRectangle(cornerRadius: 3))
             connectionButton(for: server)
-                .buttonStyle(.borderless)
+                .buttonStyle(.plain)
                 .controlSize(.small)
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, 3)
         .contentShape(Rectangle())
     }
 
@@ -391,7 +506,7 @@ struct ServerSidebarView: View {
     private func statusDot(for server: Server) -> some View {
         Circle()
             .fill(statusColor(for: server))
-            .frame(width: 8, height: 8)
+            .frame(width: 7, height: 7)
     }
 
     private func statusColor(for server: Server) -> Color {
@@ -409,13 +524,19 @@ struct ServerSidebarView: View {
     private func connectionButton(for server: Server) -> some View {
         switch connectionStates[server.id] {
         case .none, .disconnected:
-            Button("连接") { onConnect(server) }.foregroundStyle(.blue)
+            Button("连接") { onConnect(server) }
+                .foregroundStyle(.blue)
+                .font(.caption)
         case .connecting:
             ProgressView().controlSize(.small)
         case .connected:
-            Button("断开") { onDisconnect(server) }.foregroundStyle(.red)
+            Button("断开") { onDisconnect(server) }
+                .foregroundStyle(.red)
+                .font(.caption)
         case .failed:
-            Button("重试") { onConnect(server) }.foregroundStyle(.orange)
+            Button("重试") { onConnect(server) }
+                .foregroundStyle(.orange)
+                .font(.caption)
         }
     }
 
@@ -454,9 +575,7 @@ struct ServerSidebarView: View {
         NavigationStack {
             Form {
                 TextField("终端名称", text: $renameLocalTitle)
-                    .onSubmit {
-                        renameLocalSession()
-                    }
+                    .onSubmit { renameLocalSession() }
             }
             .formStyle(.grouped)
             .navigationTitle("重命名终端")
@@ -480,43 +599,5 @@ struct ServerSidebarView: View {
         localManager.renameSession(id: session.id, title: title)
         showRenameLocalSheet = false
         localSessionToRename = nil
-    }
-
-    private var themeFooterView: some View {
-        HStack(spacing: 8) {
-            Text("版本 v\(updateService.currentVersion)")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-            
-            Spacer()
-            
-            Button(action: {
-                showSettingsSheet = true
-            }) {
-                Image(systemName: "gearshape.fill")
-                    .font(.title3)
-                    .foregroundStyle(.secondary)
-            }
-            .buttonStyle(.plain)
-            .help("偏好设置与关于")
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-        .background(.ultraThinMaterial)
-    }
-}
-
-#Preview {
-    NavigationStack {
-        ServerSidebarView(
-            selection: .constant(nil),
-            sidebarMode: .constant(.ssh),
-            localSelection: .constant(nil),
-            localManager: LocalTerminalManager(),
-            connectionStates: [:],
-            onConnect: { _ in },
-            onDisconnect: { _ in }
-        )
-        .modelContainer(for: Server.self, inMemory: true)
     }
 }
