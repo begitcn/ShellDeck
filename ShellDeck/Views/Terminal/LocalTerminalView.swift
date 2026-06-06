@@ -4,31 +4,11 @@ struct LocalTerminalView: View {
     @Environment(LocalTerminalManager.self) var manager
 
     var body: some View {
-        VStack(spacing: 0) {
-            if manager.sessions.count >= 2 {
-                tabBar
-                Divider()
-            }
-            Group {
-                if manager.sessions.isEmpty {
-                    emptyView
-                } else {
-                    ZStack {
-                        ForEach(manager.sessions) { session in
-                            LocalTerminalContainerView(
-                                session: session,
-                                isRunning: Binding(
-                                    get: { session.isRunning },
-                                    set: { session.isRunning = $0 }
-                                ),
-                                isActive: session.id == manager.activeSessionID
-                            )
-                            .opacity(session.id == manager.activeSessionID ? 1.0 : 0.0)
-                            .disabled(session.id != manager.activeSessionID)
-                            .allowsHitTesting(session.id == manager.activeSessionID)
-                        }
-                    }
-                }
+        ZStack {
+            if manager.sessions.isEmpty {
+                emptyView
+            } else {
+                TerminalHostView(activeSessionID: manager.activeSessionID)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -62,48 +42,6 @@ struct LocalTerminalView: View {
         .padding(.vertical, 4)
         .background(.ultraThinMaterial)
         .overlay(Divider(), alignment: .top)
-    }
-
-    private var tabBar: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 0) {
-                ForEach(manager.sessions) { session in
-                    Button {
-                        manager.activeSessionID = session.id
-                    } label: {
-                        HStack(spacing: 6) {
-                            Image(systemName: "terminal")
-                                .font(.caption2)
-                            Text(session.title)
-                                .font(.caption2)
-                                .fontWeight(session.id == manager.activeSessionID ? .semibold : .regular)
-                            if manager.sessions.count > 1 {
-                                Button {
-                                    withAnimation { manager.closeSession(id: session.id) }
-                                } label: {
-                                    Image(systemName: "xmark")
-                                        .font(.system(size: 7, weight: .bold))
-                                        .foregroundStyle(.tertiary)
-                                        .padding(1)
-                                }
-                                .buttonStyle(.plain)
-                                .help("关闭")
-                            }
-                        }
-                        .foregroundStyle(session.id == manager.activeSessionID ? .primary : .tertiary)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 5)
-                        .background(
-                            session.id == manager.activeSessionID
-                                ? AnyShapeStyle(.ultraThinMaterial)
-                                : AnyShapeStyle(Color.clear)
-                        )
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-        }
-        .background(Color.black.opacity(0.35))
     }
 
     private var emptyView: some View {

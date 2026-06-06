@@ -1,0 +1,51 @@
+{
+  "name": "本地终端独立终端修复工作流",
+  "success": true,
+  "totalDuration": "57.9s",
+  "totalTokens": {
+    "input": 12995,
+    "output": 3046
+  },
+  "inputs": {},
+  "steps": [
+    {
+      "id": "analysis",
+      "role": "spatial-computing/terminal-integration-specialist",
+      "agentName": "终端问题诊断师",
+      "agentEmoji": "🕵️",
+      "status": "completed",
+      "output_var": "analysis_result",
+      "duration": "15.3s",
+      "tokens": {
+        "input": 3639,
+        "output": 880
+      }
+    },
+    {
+      "id": "fix",
+      "role": "engineering/engineering-frontend-developer",
+      "agentName": "终端修复专家",
+      "agentEmoji": "🔧",
+      "status": "completed",
+      "output_var": "fix_patch",
+      "duration": "25.9s",
+      "tokens": {
+        "input": 4343,
+        "output": 949
+      }
+    },
+    {
+      "id": "verify",
+      "role": "testing/testing-reality-checker",
+      "agentName": "质量认证官",
+      "agentEmoji": "✅",
+      "status": "completed",
+      "output_var": "final_fix",
+      "duration": "16.8s",
+      "tokens": {
+        "input": 5013,
+        "output": 1217
+      }
+    }
+  ]
+}

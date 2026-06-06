@@ -1,0 +1,168 @@
+name: "学术论文选题与大纲"
+description: "选题评估 + 研究方法设计 + 文献综述框架 + 完整大纲"
+
+agents_dir: "agency-agents-zh"
+
+llm:
+  provider: "deepseek"
+  model: "deepseek-chat"
+  max_tokens: 4096
+  retry: 2
+
+concurrency: 3
+
+inputs:
+  - name: research_topic
+    description: "研究主题或初步方向（越具体越好）"
+    required: true
+  - name: paper_type
+    description: "论文类型（如：本科毕业论文 / 硕士学位论文 / 期刊论文 / 会议论文）"
+    required: false
+    default: "硕士学位论文"
+  - name: discipline
+    description: "学科（如：计算机科学 / 教育学 / 经济学）"
+    required: true
+
+steps:
+  - id: topic_eval
+    role: "academic/academic-study-planner"
+    name: "选题导师"
+    emoji: "🎓"
+    task: |
+      评估研究主题「{{research_topic}}」在 {{discipline}} 领域、作为 {{paper_type}} 的可行性。
+
+      输出（400 字）:
+      1. **选题评分**:
+         - 创新性: 0-10 分（是否已被研究透）
+         - 可行性: 0-10 分（数据/方法是否可得）
+         - 理论价值: 0-10 分
+         - 实践价值: 0-10 分
+         - 综合建议: 推荐/可做/建议调整/不推荐
+      2. **精准化建议**: 原主题太宽？太窄？具体应该怎么调整（给 2-3 个更好的表述方案）
+      3. **研究问题**: 从选题中提炼出 1 个核心研究问题 + 2-3 个子问题
+      4. **预期贡献**: 做完这个研究能填补什么空白
+    output: topic_evaluation
+
+  - id: methodology
+    role: "academic/academic-study-planner"
+    name: "方法论设计师"
+    emoji: "🔬"
+    task: |
+      为研究设计方法论。
+
+      选题评估:
+      {{topic_evaluation}}
+
+      学科: {{discipline}}
+
+      输出（400 字）:
+      1. **研究范式**: 定量/定性/混合，并说明理由
+      2. **具体方法**:
+         - 如果是定量: 抽样方法、样本量、问卷/实验设计、统计方法
+         - 如果是定性: 访谈/案例/民族志，编码方案
+         - 如果是计算机/工程类: 实验环境、数据集、基线模型、评估指标
+      3. **数据来源**: 具体从哪里获取数据（公开数据集名称 / 需要采集的渠道）
+      4. **可行性检查**: 上述方法在当前条件下是否可行，可能遇到的障碍
+      5. **伦理考量**: 是否涉及人类受试者、数据隐私等，需要什么审批
+    output: methodology
+    depends_on: [topic_eval]
+
+  - id: literature
+    role: "academic/academic-historian"
+    name: "文献综述专家"
+    emoji: "📚"
+    task: |
+      为选题设计文献综述的骨架。
+
+      选题:
+      {{topic_evaluation}}
+
+      学科: {{discipline}}
+
+      输出（400 字）:
+      1. **理论基础**: 本研究依托的 2-3 个核心理论/经典概念，每个 1 句话解释
+      2. **关键学者/流派**: 这个领域必须引用的 5-8 位学者或代表作（作者-年份-代表性贡献）
+      3. **研究脉络**:
+         - 早期研究关注什么
+         - 近 5-10 年研究热点
+         - 当前未解决的争议
+      4. **检索建议**:
+         - 中文关键词: 3-5 个
+         - 英文关键词: 3-5 个
+         - 推荐数据库: CNKI / Web of Science / ACM / IEEE 等（按学科推荐）
+      5. **文献综述写作思路**: 按"议题"而非"时间"组织，分 3-4 个主题块
+
+      ⚠️ 具体学者名和年份不确定时明确标「需核实」，不要编造。
+    output: literature_framework
+    depends_on: [topic_eval]
+
+  - id: outline
+    role: "academic/academic-study-planner"
+    name: "论文架构师"
+    emoji: "📝"
+    task: |
+      整合生成完整论文大纲。
+
+      选题: {{topic_evaluation}}
+      方法: {{methodology}}
+      文献: {{literature_framework}}
+
+      论文类型: {{paper_type}}
+
+      输出结构（按学位论文标准章节）:
+      ```
+      # 【论文题目】
+      <基于选题精准化建议确定的最终题目>
+
+      # 【摘要要点】
+      - 研究问题:
+      - 方法:
+      - 主要发现（预期）:
+      - 贡献:
+
+      # 【关键词】
+      5-7 个
+
+      # 第一章 绪论
+      - 1.1 研究背景（写作要点）
+      - 1.2 研究问题（引用选题评估中的核心问题）
+      - 1.3 研究意义（理论+实践）
+      - 1.4 研究方法简述
+      - 1.5 论文结构
+
+      # 第二章 文献综述
+      <按文献框架的主题块组织>
+      - 2.1 <主题块1>
+      - 2.2 <主题块2>
+      - 2.3 <主题块3>
+      - 2.4 研究述评（指出空白）
+
+      # 第三章 理论基础与研究设计
+      <基于方法论>
+      - 3.1 理论框架
+      - 3.2 研究假设/研究问题细化
+      - 3.3 研究方法
+      - 3.4 数据来源与样本
+      - 3.5 变量测量 / 实验设计
+
+      # 第四章 数据分析与结果
+      <占位，写作时填充>
+      - 4.1 描述性分析
+      - 4.2 主要发现
+      - 4.3 稳健性检验 / 消融实验
+
+      # 第五章 讨论与结论
+      - 5.1 结果讨论（与文献对话）
+      - 5.2 理论贡献
+      - 5.3 实践启示
+      - 5.4 研究局限
+      - 5.5 未来研究方向
+
+      # 【时间规划】
+      <按 {{paper_type}} 给出 3-6 个月的分阶段时间表>
+
+      # 【下一步行动】
+      按优先级列 3 条最该立刻做的事
+      ```
+    output: paper_outline
+    depends_on: [methodology, literature]

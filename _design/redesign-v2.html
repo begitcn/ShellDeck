@@ -1,0 +1,1046 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ShellDeck Redesign v2 · 融合方案</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #1a1a1e;
+  --surface: #222226;
+  --surface-raised: #2a2a2e;
+  --border: #323236;
+  --border-light: #3a3a3e;
+  --text-primary: #f0f0f0;
+  --text-secondary: #909098;
+  --text-tertiary: #606068;
+  --accent: #4f8ef7;
+  --green: #4cd964;
+  --red: #ff4757;
+  --orange: #ff9500;
+  --purple: #af52de;
+  --sidebar-w: 270px;
+  --header-h: 44px;
+  --radius: 8px;
+  --radius-sm: 6px;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'PingFang SC', sans-serif;
+  background: #111;
+  color: var(--text-primary);
+  display: flex;
+  justify-content: center;
+  padding: 32px 20px;
+  min-height: 100vh;
+}
+
+.mac-window {
+  width: 1200px;
+  max-width: 100%;
+  background: var(--bg);
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+}
+
+.window-titlebar {
+  height: var(--header-h);
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  user-select: none;
+}
+.traffic-lights { display: flex; gap: 8px; margin-right: 12px; flex-shrink: 0; }
+.traffic-light { width: 12px; height: 12px; border-radius: 50%; }
+.traffic-light.red { background: #ff5f57; }
+.traffic-light.yellow { background: #febc2e; }
+.traffic-light.green { background: #28c840; }
+.window-title { flex: 1; text-align: center; font-size: 13px; font-weight: 600; color: var(--text-secondary); letter-spacing: 0.3px; }
+
+/* ============ Layout ============ */
+.app-grid {
+  display: grid;
+  grid-template-columns: var(--sidebar-w) 1fr;
+  height: 680px;
+}
+
+/* ============ Sidebar ============ */
+.sidebar {
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.sidebar-header {
+  padding: 12px 12px 6px;
+}
+
+/* --- New: Universal action bar --- */
+.action-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 0 8px 0;
+}
+.action-bar .app-title {
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: -0.2px;
+  flex: 1;
+  color: var(--text-primary);
+}
+.action-bar .action-btn {
+  width: 28px; height: 28px;
+  border-radius: 6px;
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  transition: all 0.12s;
+}
+.action-bar .action-btn:hover { background: var(--surface-raised); color: var(--text-primary); }
+.action-bar .action-btn.primary { background: var(--accent); color: white; }
+.action-bar .action-btn.primary:hover { background: var(--accent-dim); }
+
+.search-box { position: relative; margin-bottom: 4px; }
+.search-box input {
+  width: 100%;
+  padding: 6px 10px 6px 28px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 12px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.search-box input::placeholder { color: var(--text-tertiary); }
+.search-box input:focus { border-color: var(--accent); }
+.search-box .icon {
+  position: absolute;
+  left: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 12px;
+  color: var(--text-tertiary);
+  pointer-events: none;
+}
+
+/* ============ Server / Session List ============ */
+.session-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 2px 6px 6px;
+}
+.session-list::-webkit-scrollbar { width: 4px; }
+.session-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+/* === Section headers (for both server groups and local terminal) === */
+.section-header {
+  display: flex;
+  align-items: center;
+  padding: 8px 8px 4px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  letter-spacing: 0.5px;
+  user-select: none;
+  cursor: pointer;
+  border-radius: 4px;
+  margin-top: 4px;
+}
+.section-header:hover { color: var(--text-secondary); }
+.section-header .arrow { font-size: 8px; margin-right: 4px; transition: transform 0.15s; }
+.section-header .arrow.open { transform: rotate(90deg); }
+.section-header .count {
+  margin-left: auto;
+  background: var(--border);
+  padding: 0 6px;
+  border-radius: 8px;
+  font-size: 10px;
+  font-weight: 500;
+}
+
+/* Colored section headers (Variant C style) */
+.section-header.env-prod { border-left: 2px solid var(--red); padding-left: 8px; }
+.section-header.env-staging { border-left: 2px solid var(--orange); padding-left: 8px; }
+.section-header.env-dev { border-left: 2px solid var(--green); padding-left: 8px; }
+.section-header.env-personal { border-left: 2px solid var(--accent); padding-left: 8px; }
+
+/* Special section for local terminals - subtle purple */
+.section-header.local-term {
+  border-left: 2px solid var(--purple);
+  padding-left: 8px;
+  margin-top: 8px;
+  border-top: 1px solid var(--border-light);
+  padding-top: 10px;
+  border-radius: 0;
+  margin-left: -6px;
+  margin-right: -6px;
+  padding-left: 14px;
+  margin-bottom: 2px;
+}
+.section-header.local-term:hover { border-top-color: var(--border); }
+
+/* === Session items (unified: server + local terminal) === */
+.session-item {
+  display: flex;
+  align-items: center;
+  padding: 6px 8px;
+  border-radius: 5px;
+  cursor: pointer;
+  gap: 8px;
+  transition: all 0.1s;
+  margin: 1px 0;
+}
+.session-item:hover { background: var(--surface-raised); }
+.session-item.active { background: var(--accent); }
+.session-item.active .session-name { color: white; }
+.session-item.active .session-sub { color: rgba(255,255,255,0.65); }
+.session-item.active .session-badge { background: rgba(255,255,255,0.15); color: rgba(255,255,255,0.9); }
+
+/* Special style for local terminal items */
+.session-item.local { }
+.session-item.local .session-icon { color: var(--purple); font-size: 14px; }
+.session-item.active.local .session-icon { color: rgba(255,255,255,0.8); }
+
+.status-dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  border: 1.5px solid transparent;
+  transition: all 0.2s;
+}
+.status-dot.disconnected { background: var(--text-tertiary); }
+.status-dot.connecting { background: var(--orange); animation: pulse 1s infinite; }
+.status-dot.connected { background: var(--green); }
+.status-dot.failed { background: var(--red); }
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.session-info { flex: 1; min-width: 0; }
+.session-name { font-size: 13px; font-weight: 500; line-height: 1.3; display: flex; align-items: center; gap: 5px; }
+.session-sub { font-size: 11px; color: var(--text-tertiary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.session-badge {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--border);
+  color: var(--text-secondary);
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+/* Close button for local terminal */
+.close-session {
+  width: 18px; height: 18px;
+  border-radius: 4px;
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  opacity: 0;
+  transition: all 0.12s;
+  flex-shrink: 0;
+}
+.session-item:hover .close-session { opacity: 1; }
+.close-session:hover { background: rgba(255,71,87,0.2); color: var(--red); }
+
+/* ============ Footer ============ */
+.sidebar-footer {
+  padding: 8px 12px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+.sidebar-footer .spacer { flex: 1; }
+.sidebar-footer button {
+  background: none;
+  border: none;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  font-size: 14px;
+  transition: all 0.15s;
+}
+.sidebar-footer button:hover { background: var(--surface-raised); color: var(--text-primary); }
+
+/* ============ Main Content ============ */
+.main-content {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.content-toolbar {
+  height: 40px;
+  display: flex;
+  align-items: center;
+  padding: 0 14px;
+  gap: 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.tab-bar {
+  display: flex;
+  gap: 2px;
+  flex: 1;
+}
+.tab-item {
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-tertiary);
+  border-radius: 5px 5px 0 0;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: all 0.1s;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background: none;
+  border-top: none;
+  border-left: none;
+  border-right: none;
+  font-family: inherit;
+}
+.tab-item:hover { color: var(--text-secondary); }
+.tab-item.active { color: var(--accent); border-bottom-color: var(--accent); }
+.tab-item .icon { font-size: 13px; }
+
+.toolbar-actions {
+  display: flex;
+  gap: 4px;
+}
+.toolbar-actions button {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  padding: 4px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: all 0.1s;
+  font-family: inherit;
+}
+.toolbar-actions button:hover { background: var(--surface-raised); color: var(--text-primary); }
+.toolbar-actions button.danger { color: var(--red); }
+.toolbar-actions button.danger:hover { background: rgba(255,71,87,0.15); }
+
+/* ============ Content Area ============ */
+.content-area {
+  flex: 1;
+  overflow: auto;
+  padding: 16px;
+  background: var(--bg);
+}
+
+/* ============ Terminal ============ */
+.terminal-preview {
+  background: #0d0d12;
+  border-radius: var(--radius-sm);
+  padding: 14px;
+  font-family: 'SF Mono', 'Menlo', 'Monaco', 'JetBrainsMono NF', monospace;
+  font-size: 13px;
+  line-height: 1.55;
+}
+.terminal-line { white-space: pre; }
+.terminal-line .prompt { color: var(--green); }
+.terminal-line .prompt.local { color: var(--purple); }
+.terminal-line .cmd { color: var(--text-primary); }
+.terminal-line .output { color: var(--text-secondary); }
+.terminal-line .cursor { 
+  display: inline-block;
+  width: 8px;
+  height: 15px;
+  background: rgba(240,240,240,0.4);
+  animation: blink 1s step-end infinite;
+  vertical-align: text-bottom;
+}
+@keyframes blink { 50% { opacity: 0; } }
+
+/* ============ File Browser ============ */
+.path-bar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 0 10px;
+  font-size: 13px;
+  flex-wrap: wrap;
+}
+.path-bar .segment {
+  padding: 2px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  color: var(--accent);
+  transition: background 0.1s;
+  font-family: 'SF Mono', 'Menlo', monospace;
+  font-size: 12px;
+}
+.path-bar .segment:hover { background: rgba(79,142,247,0.12); }
+.path-bar .segment.current {
+  color: var(--text-primary);
+  font-weight: 500;
+  cursor: default;
+  background: none;
+}
+.path-bar .sep { color: var(--text-tertiary); font-size: 10px; }
+
+.file-grid-header {
+  display: grid;
+  grid-template-columns: 1fr 100px 160px 50px;
+  padding: 6px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-bottom: 1px solid var(--border);
+  user-select: none;
+}
+.file-grid-header span { cursor: pointer; }
+.file-grid-header span:hover { color: var(--text-secondary); }
+
+.file-row {
+  display: grid;
+  grid-template-columns: 1fr 100px 160px 50px;
+  padding: 5px 10px;
+  font-size: 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  align-items: center;
+  transition: background 0.08s;
+  margin: 1px 0;
+}
+.file-row:hover { background: var(--surface-raised); }
+.file-row.selected { background: rgba(79,142,247,0.15); }
+.file-row .name { display: flex; align-items: center; gap: 8px; }
+.file-row .name .file-icon { font-size: 14px; flex-shrink: 0; }
+.file-row .name .file-icon.dir { color: var(--accent); }
+.file-row .size, .file-row .date, .file-row .perm { color: var(--text-secondary); font-size: 11px; }
+.file-row .date { font-variant-numeric: tabular-nums; }
+.file-row .perm { font-family: 'SF Mono', 'Menlo', monospace; font-size: 10px; }
+
+/* ============ Bottom Bar ============ */
+.bottom-bar {
+  height: 28px;
+  display: flex;
+  align-items: center;
+  padding: 0 14px;
+  gap: 16px;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+  font-size: 11px;
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+}
+.bottom-bar .item { display: flex; align-items: center; gap: 4px; }
+.bottom-bar .spacer { flex: 1; }
+.bottom-bar .success { color: var(--green); }
+.bottom-bar .info { color: var(--accent); }
+
+/* ============ State indicators at top-right ============ */
+.connection-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 10px 2px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 500;
+}
+.connection-chip.connected { background: rgba(76,217,100,0.12); color: var(--green); }
+.connection-chip.connecting { background: rgba(255,149,0,0.12); color: var(--orange); }
+.connection-chip.disconnected { background: rgba(96,96,104,0.15); color: var(--text-tertiary); }
+.connection-chip .dot { width: 5px; height: 5px; border-radius: 50%; }
+.connection-chip .dot.connected { background: var(--green); }
+.connection-chip .dot.connecting { background: var(--orange); animation: pulse 1s infinite; }
+.connection-chip .dot.disconnected { background: var(--text-tertiary); }
+
+/* ============ Local Terminal Tabs ============ */
+.local-tab-bar {
+  display: flex;
+  gap: 0;
+  background: #0d0d12;
+  border-radius: 6px 6px 0 0;
+  overflow: hidden;
+  border-bottom: 1px solid #1a1a20;
+}
+.local-tab {
+  padding: 5px 14px;
+  font-size: 11px;
+  color: var(--text-tertiary);
+  background: #0d0d12;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border-right: 1px solid #1a1a20;
+  font-family: inherit;
+  transition: all 0.1s;
+}
+.local-tab:hover { background: #121218; color: var(--text-secondary); }
+.local-tab.active { background: #16161e; color: var(--text-primary); }
+.local-tab .tab-close {
+  font-size: 8px;
+  opacity: 0;
+  transition: opacity 0.1s;
+  padding: 1px;
+  border-radius: 2px;
+}
+.local-tab:hover .tab-close { opacity: 0.5; }
+.local-tab .tab-close:hover { opacity: 1; background: rgba(255,71,87,0.3); color: var(--red); }
+
+/* ============ Design Annotations ============ */
+.annotation {
+  display: flex;
+  gap: 10px;
+  margin: 20px auto 0;
+  max-width: 1200px;
+  padding: 14px 18px;
+  background: var(--surface);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+}
+.annotation h3 { font-size: 13px; font-weight: 600; margin-bottom: 8px; color: var(--text-primary); }
+.annotation ul { list-style: none; padding: 0; }
+.annotation li { 
+  font-size: 12px;
+  color: var(--text-secondary);
+  padding: 3px 0 3px 14px;
+  position: relative;
+  line-height: 1.5;
+}
+.annotation li::before { content: '—'; position: absolute; left: 0; color: var(--text-tertiary); }
+.annotation .tag {
+  display: inline-block;
+  padding: 0 7px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 600;
+  margin-right: 4px;
+}
+.tag.new { background: rgba(79,142,247,0.2); color: var(--accent); }
+.tag.fix { background: rgba(255,71,87,0.15); color: var(--red); }
+.tag.merge { background: rgba(175,82,222,0.2); color: var(--purple); }
+
+/* ============ Interactive Demo Panel ============ */
+.interactive-hint {
+  max-width: 1200px;
+  margin: 12px auto 0;
+  padding: 8px 16px;
+  background: rgba(79,142,247,0.08);
+  border-radius: var(--radius);
+  border: 1px solid rgba(79,142,247,0.2);
+  font-size: 12px;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.interactive-hint strong { color: var(--accent); }
+
+/* ============ Responsive ============ */
+@media (max-width: 900px) {
+  .app-grid { grid-template-columns: 1fr; }
+  .sidebar { display: none; }
+}
+</style>
+</head>
+<body>
+
+<div style="flex:1;max-width:1240px">
+
+  <!-- ============ View 1: SSH Connected - Terminal ============ -->
+  <div class="mac-window">
+    <div class="window-titlebar">
+      <div class="traffic-lights">
+        <div class="traffic-light red"></div>
+        <div class="traffic-light yellow"></div>
+        <div class="traffic-light green"></div>
+      </div>
+      <div class="window-title">ShellDeck</div>
+    </div>
+
+    <div class="app-grid">
+      <!-- Unified Sidebar -->
+      <div class="sidebar">
+        <div class="sidebar-header">
+          <div class="action-bar">
+            <span class="app-title">ShellDeck</span>
+            <button class="action-btn" title="偏好设置">⚙</button>
+            <button class="action-btn primary" title="新建会话">＋</button>
+          </div>
+          <div class="search-box">
+            <span class="icon">⌕</span>
+            <input type="text" placeholder="搜索服务器或终端..." />
+          </div>
+        </div>
+
+        <div class="session-list">
+          <!-- Server group: 生产 -->
+          <div class="section-header env-prod">
+            <span class="arrow open">▶</span>
+            生产环境
+            <span class="count">3</span>
+          </div>
+          <div class="session-item active">
+            <div class="status-dot connected"></div>
+            <div class="session-info">
+              <div class="session-name">Web 主服务器</div>
+              <div class="session-sub">admin@web-01.prod.example.com:22</div>
+            </div>
+            <span class="session-badge">SSH</span>
+          </div>
+          <div class="session-item">
+            <div class="status-dot disconnected"></div>
+            <div class="session-info">
+              <div class="session-name">API 网关</div>
+              <div class="session-sub">admin@api-01.prod.example.com:22</div>
+            </div>
+            <span class="session-badge">KEY</span>
+          </div>
+          <div class="session-item">
+            <div class="status-dot failed"></div>
+            <div class="session-info">
+              <div class="session-name">数据库主节点</div>
+              <div class="session-sub">admin@db-master.prod:22</div>
+            </div>
+            <span class="session-badge">SSH</span>
+          </div>
+
+          <!-- Server group: 开发 (collapsed) -->
+          <div class="section-header env-dev">
+            <span class="arrow">▶</span>
+            开发环境
+            <span class="count">2</span>
+          </div>
+
+          <!-- Server group: 个人 (collapsed) -->
+          <div class="section-header env-personal">
+            <span class="arrow">▶</span>
+            个人
+            <span class="count">1</span>
+          </div>
+
+          <!-- === LOCAL TERMINAL SECTION === -->
+          <div class="section-header local-term">
+            <span class="arrow open">▶</span>
+            本地终端
+            <span class="count">2</span>
+            <button style="background:none;border:none;color:var(--text-tertiary);cursor:pointer;font-size:12px;padding:0 4px;margin-left:4px" title="新建本地终端">＋</button>
+          </div>
+
+          <div class="session-item local active">
+            <div class="session-icon">⊢</div>
+            <div class="session-info">
+              <div class="session-name">bash — 本地 1</div>
+              <div class="session-sub">zsh · /Users/me/Projects</div>
+            </div>
+            <button class="close-session">✕</button>
+          </div>
+          <div class="session-item local">
+            <div class="session-icon">⊢</div>
+            <div class="session-info">
+              <div class="session-name">bash — 本地 2</div>
+              <div class="session-sub">zsh · /etc/nginx</div>
+            </div>
+            <button class="close-session">✕</button>
+          </div>
+        </div>
+
+        <div class="sidebar-footer">
+          <span>v0.0.7</span>
+          <div class="spacer"></div>
+          <span style="display:flex;align-items:center;gap:4px">◉ <span style="color:var(--green)">在线</span></span>
+        </div>
+      </div>
+
+      <!-- Main Content: Terminal View -->
+      <div class="main-content">
+        <div class="content-toolbar">
+          <div class="tab-bar">
+            <button class="tab-item active"><span class="icon">⊞</span> 终端</button>
+            <button class="tab-item"><span class="icon">⊟</span> 文件管理</button>
+            <button class="tab-item"><span class="icon">◉</span> 系统监控</button>
+            <button class="tab-item"><span class="icon">ⓘ</span> 信息</button>
+          </div>
+          <div class="toolbar-actions">
+            <span class="connection-chip connected">
+              <span class="dot connected"></span> web-01.prod
+            </span>
+            <button class="danger" title="断开连接">⏻</button>
+          </div>
+        </div>
+
+        <div class="content-area">
+          <div class="terminal-preview">
+            <div class="terminal-line"><span class="prompt">admin@web-01:~$</span><span class="cmd"> </span></div>
+            <div class="terminal-line"><span class="prompt">admin@web-01:~$</span><span class="cmd"> docker ps</span></div>
+            <div class="terminal-line"><span class="output">CONTAINER ID   IMAGE          COMMAND       STATUS        PORTS</span></div>
+            <div class="terminal-line"><span class="output">a1b2c3d4e5f6   nginx:1.25     "nginx -g..."  Up 3 days     0.0.0.0:80->80/tcp</span></div>
+            <div class="terminal-line"><span class="output">f6e5d4c3b2a1   postgres:16    "postgres"    Up 3 days     0.0.0.0:5432->5432/tcp</span></div>
+            <div class="terminal-line"><span class="prompt">admin@web-01:~$</span><span class="cmd"> systemctl status nginx<span class="cursor"></span></span></div>
+          </div>
+        </div>
+
+        <div class="bottom-bar">
+          <span class="item">◉ <span class="success">已连接</span></span>
+          <span class="item">⊡  web-01.prod.example.com:22</span>
+          <span class="item">◈  80×24</span>
+          <span class="spacer"></span>
+          <span class="item">⟳  ping 3ms</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div style="height:20px"></div>
+
+  <!-- ============ View 2: Local Terminal Active ============ -->
+  <div class="mac-window">
+    <div class="window-titlebar">
+      <div class="traffic-lights">
+        <div class="traffic-light red"></div>
+        <div class="traffic-light yellow"></div>
+        <div class="traffic-light green"></div>
+      </div>
+      <div class="window-title">ShellDeck — 本地终端</div>
+    </div>
+
+    <div class="app-grid">
+      <div class="sidebar">
+        <div class="sidebar-header">
+          <div class="action-bar">
+            <span class="app-title">ShellDeck</span>
+            <button class="action-btn">⚙</button>
+            <button class="action-btn primary">＋</button>
+          </div>
+          <div class="search-box">
+            <span class="icon">⌕</span>
+            <input type="text" placeholder="搜索服务器或终端..." />
+          </div>
+        </div>
+
+        <div class="session-list">
+          <!-- 生产 group (collapsed) -->
+          <div class="section-header env-prod">
+            <span class="arrow">▶</span>
+            生产环境
+            <span class="count">3</span>
+          </div>
+          <!-- 开发 group (collapsed) -->
+          <div class="section-header env-dev">
+            <span class="arrow">▶</span>
+            开发环境
+            <span class="count">2</span>
+          </div>
+          <!-- 个人 group (collapsed) -->
+          <div class="section-header env-personal">
+            <span class="arrow">▶</span>
+            个人
+            <span class="count">1</span>
+          </div>
+
+          <!-- Local Terminal section - expanded, active -->
+          <div class="section-header local-term">
+            <span class="arrow open">▶</span>
+            本地终端
+            <span class="count">3</span>
+            <button style="background:none;border:none;color:var(--text-tertiary);cursor:pointer;font-size:12px;padding:0 4px;margin-left:4px">＋</button>
+          </div>
+
+          <div class="session-item local">
+            <div class="session-icon">⊢</div>
+            <div class="session-info">
+              <div class="session-name">bash — 本地 1</div>
+              <div class="session-sub">zsh · ~/Projects</div>
+            </div>
+            <button class="close-session">✕</button>
+          </div>
+          <div class="session-item local active">
+            <div class="session-icon">⊢</div>
+            <div class="session-info">
+              <div class="session-name">bash — ShellDeck</div>
+              <div class="session-sub">zsh · ShellDeck/</div>
+            </div>
+            <button class="close-session">✕</button>
+          </div>
+          <div class="session-item local">
+            <div class="session-icon">⊢</div>
+            <div class="session-info">
+              <div class="session-name">bash — 本地 2</div>
+              <div class="session-sub">zsh · ~/Documents</div>
+            </div>
+            <button class="close-session">✕</button>
+          </div>
+        </div>
+
+        <div class="sidebar-footer">
+          <span>v0.0.7</span>
+          <div class="spacer"></div>
+          <span style="display:flex;align-items:center;gap:4px">◆ <span style="color:var(--purple)">本地</span></span>
+        </div>
+      </div>
+
+      <!-- Main Content -->
+      <div class="main-content">
+        <div class="content-toolbar">
+          <div class="tab-bar">
+            <div class="local-tab-bar">
+              <button class="local-tab">bash — 本地 1 <span class="tab-close">✕</span></button>
+              <button class="local-tab active">bash — ShellDeck <span class="tab-close">✕</span></button>
+              <button class="local-tab">bash — 本地 2 <span class="tab-close">✕</span></button>
+            </div>
+          </div>
+          <div class="toolbar-actions">
+            <span class="connection-chip disconnected">
+              <span class="dot disconnected"></span> 本地终端
+            </span>
+          </div>
+        </div>
+
+        <div class="content-area">
+          <div class="terminal-preview">
+            <div class="terminal-line"><span class="prompt local">chaogeek@Macmini:~$</span><span class="cmd"> </span></div>
+            <div class="terminal-line"><span class="prompt local">chaogeek@Macmini:~$</span><span class="cmd"> cd ShellDeck</span></div>
+            <div class="terminal-line"><span class="prompt local">chaogeek@Macmini:ShellDeck$</span><span class="cmd"> ls -la</span></div>
+            <div class="terminal-line"><span class="output">total 168</span></div>
+            <div class="terminal-line"><span class="output">drwxr-xr-x  18 chaogeek  staff   576  6  5 20:48 .</span></div>
+            <div class="terminal-line"><span class="output">drwxr-xr-x  35 chaogeek  staff  1120  6  5 19:30 ..</span></div>
+            <div class="terminal-line"><span class="output">drwxr-xr-x   8 chaogeek  staff   256  6  5 20:49 ShellDeck</span></div>
+            <div class="terminal-line"><span class="output">drwxr-xr-x   3 chaogeek  staff    96  6  5 20:51 ShellDeck.xcodeproj</span></div>
+            <div class="terminal-line"><span class="output">drwxr-xr-x   4 chaogeek  staff   128  6  5 18:57 ShellDeckTests</span></div>
+            <div class="terminal-line"><span class="prompt local">chaogeek@Macmini:ShellDeck$</span><span class="cmd"> git status<span class="cursor"></span></span></div>
+          </div>
+        </div>
+
+        <div class="bottom-bar">
+          <span class="item">◆ <span style="color:var(--purple)">本地</span></span>
+          <span class="item">⊢  zsh · Macmini</span>
+          <span class="item">◈  80×24</span>
+          <span class="spacer"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div style="height:20px"></div>
+
+  <!-- ============ View 3: File Browser (multi-selection) ============ -->
+  <div class="mac-window">
+    <div class="window-titlebar">
+      <div class="traffic-lights">
+        <div class="traffic-light red"></div>
+        <div class="traffic-light yellow"></div>
+        <div class="traffic-light green"></div>
+      </div>
+      <div class="window-title">ShellDeck — 文件管理</div>
+    </div>
+
+    <div class="app-grid">
+      <div class="sidebar">
+        <div class="sidebar-header">
+          <div class="action-bar">
+            <span class="app-title">ShellDeck</span>
+            <button class="action-btn">⚙</button>
+            <button class="action-btn primary">＋</button>
+          </div>
+          <div class="search-box">
+            <span class="icon">⌕</span>
+            <input type="text" placeholder="搜索服务器或终端..." />
+          </div>
+        </div>
+
+        <div class="session-list">
+          <div class="section-header env-prod">
+            <span class="arrow open">▶</span>
+            生产环境
+            <span class="count">3</span>
+          </div>
+          <div class="session-item active">
+            <div class="status-dot connected"></div>
+            <div class="session-info">
+              <div class="session-name">Web 主服务器</div>
+              <div class="session-sub">admin@web-01.prod.example.com:22</div>
+            </div>
+            <span class="session-badge">SSH</span>
+          </div>
+          <div class="session-item">
+            <div class="status-dot connected"></div>
+            <div class="session-info">
+              <div class="session-name">API 网关</div>
+              <div class="session-sub">admin@api-01.prod.example.com:22</div>
+            </div>
+            <span class="session-badge">SSH</span>
+          </div>
+
+          <div class="section-header env-dev">
+            <span class="arrow">▶</span>
+            开发环境
+            <span class="count">2</span>
+          </div>
+
+          <div class="section-header local-term">
+            <span class="arrow open">▶</span>
+            本地终端
+            <span class="count">2</span>
+            <button style="background:none;border:none;color:var(--text-tertiary);cursor:pointer;font-size:12px;padding:0 4px;margin-left:4px">＋</button>
+          </div>
+        </div>
+
+        <div class="sidebar-footer">
+          <span>v0.0.7</span>
+          <div class="spacer"></div>
+          <span style="display:flex;align-items:center;gap:4px">◉ <span style="color:var(--green)">2 在线</span></span>
+        </div>
+      </div>
+
+      <div class="main-content">
+        <div class="content-toolbar">
+          <div class="tab-bar">
+            <button class="tab-item"><span class="icon">⊞</span> 终端</button>
+            <button class="tab-item active"><span class="icon">⊟</span> 文件管理</button>
+            <button class="tab-item"><span class="icon">◉</span> 系统监控</button>
+            <button class="tab-item"><span class="icon">ⓘ</span> 信息</button>
+          </div>
+          <div class="toolbar-actions">
+            <button title="上传文件或目录">＋ 上传</button>
+            <button title="刷新目录">↻</button>
+            <button title="新建目录">📁+</button>
+            <button class="danger" title="断开连接">⏻</button>
+          </div>
+        </div>
+
+        <div class="content-area">
+          <div class="path-bar">
+            <span class="segment">/</span><span class="sep">›</span>
+            <span class="segment">var</span><span class="sep">›</span>
+            <span class="segment">log</span><span class="sep">›</span>
+            <span class="segment">nginx</span>
+            <button style="margin-left:auto;background:none;border:none;color:var(--text-tertiary);cursor:pointer;font-size:11px;padding:2px 6px;border-radius:4px;font-family:inherit">✏️ 编辑路径</button>
+          </div>
+
+          <!-- Drop zone hint -->
+          <div style="border:2px dashed var(--border-light);border-radius:6px;padding:6px 10px;margin-bottom:8px;text-align:center;font-size:11px;color:var(--text-tertiary);background:rgba(79,142,247,0.03)">
+            📁 拖放文件或文件夹到此处上传
+          </div>
+
+          <div class="file-grid-header">
+            <span>名称</span>
+            <span style="text-align:right">大小</span>
+            <span>修改日期</span>
+            <span style="text-align:center">权限</span>
+          </div>
+
+          <div class="file-row">
+            <div class="name"><span class="file-icon dir">📁</span> ..</div>
+            <div class="size">—</div>
+            <div class="date">—</div>
+            <div class="perm">—</div>
+          </div>
+          <div class="file-row">
+            <div class="name"><span class="file-icon dir">📁</span> nginx</div>
+            <div class="size">—</div>
+            <div class="date">2026-05-28 14:32</div>
+            <div class="perm">drwxr-xr-x</div>
+          </div>
+          <div class="file-row selected">
+            <div class="name"><span class="file-icon">📄</span> access.log</div>
+            <div class="size">2.4 MB</div>
+            <div class="date">2026-06-05 20:48</div>
+            <div class="perm">-rw-r--r--</div>
+          </div>
+          <div class="file-row">
+            <div class="name"><span class="file-icon">📄</span> error.log</div>
+            <div class="size">128 KB</div>
+            <div class="date">2026-06-05 19:12</div>
+            <div class="perm">-rw-r--r--</div>
+          </div>
+          <div class="file-row">
+            <div class="name"><span class="file-icon">📄</span> app.log</div>
+            <div class="size">856 KB</div>
+            <div class="date">2026-06-05 18:00</div>
+            <div class="perm">-rw-rw-r--</div>
+          </div>
+
+          <!-- Transfer progress -->
+          <div style="margin-top:14px;padding:10px 12px;background:var(--surface);border-radius:6px;border:1px solid var(--border)">
+            <div style="display:flex;align-items:center;gap:8px;font-size:11px;color:var(--text-secondary)">
+              <span>⬆ 传输中</span>
+              <span class="info">access.log</span>
+              <span style="flex:1"></span>
+              <span>67% · 1.6 MB / 2.4 MB</span>
+            </div>
+            <div style="height:4px;background:var(--border);border-radius:2px;margin-top:6px;overflow:hidden">
+              <div style="height:100%;width:67%;background:var(--accent);border-radius:2px;transition:width 0.3s"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="bottom-bar">
+          <span class="item">◉ <span class="success">已连接</span></span>
+          <span class="item">⊡  /var/log/nginx</span>
+          <span class="item">📂  5 个项目</span>
+          <span class="spacer"></span>
+          <span class="item" style="color:var(--accent)">⬆ access.log 67%</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ Design Annotations ============ -->
+  <div class="annotation">
+    <div style="flex:1">
+      <h3>🔄 核心变更：融合本地终端 & SSH 为统一「会话列表」</h3>
+      <ul>
+        <li><span class="tag new">重构</span> <strong>移除模式切换器</strong>——不再有 SSH/本地终端的分段切换。两者共存于侧边栏</li>
+        <li><span class="tag new">统一</span> SSH 服务器按分组（生产/开发/个人），本地终端独立为一个紫色标记的「本地终端」分区</li>
+        <li><span class="tag new">无缝切换</span> 点击侧边栏任一会话直接切换内容区——SSH 终端、本地终端、文件管理、监控都在同一视图层级</li>
+        <li><span class="tag merge">融合</span> 本地终端会话有 <strong>独立标签栏</strong>（类 iTerm2），支持多标签快速切换</li>
+      </ul>
+    </div>
+    <div style="flex:1">
+      <h3>🎨 视觉改进（A 布局 + C 配色）</h3>
+      <ul>
+        <li><span class="tag new">新增</span> 分组彩色左边框：<span style="color:var(--red)">生产=红</span> / <span style="color:var(--orange)">预发布=橙</span> / <span style="color:var(--green)">开发=绿</span> / <span style="color:var(--accent)">个人=蓝</span></li>
+        <li><span class="tag new">新增</span> 连接芯片（connection-chip）——在 toolbar 直观显示当前连接状态</li>
+        <li><span class="tag new">新增</span> 底部状态栏——连接状态、主机名、终端尺寸、延迟一目了然</li>
+        <li><span class="tag fix">修复</span> 文件管理器改为 Grid 布局，支持列排序、键盘导航、权限列</li>
+        <li><span class="tag fix">修复</span> 拖放上传区域从 overlay 改为条状提示，不影响文件列表操作</li>
+        <li><span class="tag new">新增</span> 本地终端标签栏（多会话时顶部显示类似 iTerm 的 tab bar）</li>
+      </ul>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>

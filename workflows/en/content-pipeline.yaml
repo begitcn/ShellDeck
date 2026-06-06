@@ -1,0 +1,83 @@
+name: "Content Creation Pipeline"
+description: "Topic to finished draft — research, write, brand review, final edit"
+
+agents_dir: "agency-agents"
+
+llm:
+  provider: "deepseek"
+  model: "deepseek-chat"
+  max_tokens: 4096
+
+concurrency: 2
+
+inputs:
+  - name: topic
+    description: "Content topic"
+    required: true
+  - name: target_audience
+    description: "Target audience"
+    required: true
+  - name: platform
+    description: "Publishing platform (e.g. Substack, LinkedIn, Medium, Twitter)"
+    required: true
+
+steps:
+  - id: research
+    role: "marketing/marketing-social-media-strategist"
+    task: |
+      Research this topic for content.
+      Topic: {{topic}}
+      Audience: {{target_audience}}
+      Platform: {{platform}}
+
+      Output:
+      1. Key information points
+      2. Pain points the audience cares about
+      3. Competitor / prior-art content analysis
+      4. Suggested content angle
+    output: research_report
+
+  - id: draft
+    role: "marketing/marketing-content-creator"
+    task: |
+      Based on this research, write an article suited for {{platform}}.
+
+      Research:
+      {{research_report}}
+
+      Requirements:
+      - Audience: {{target_audience}}
+      - Tone and structure suited to {{platform}}
+      - Strong, attention-grabbing headline
+      - Clear structure, easy to read
+    output: draft_content
+    depends_on: [research]
+
+  - id: brand_review
+    role: "marketing/marketing-growth-hacker"
+    task: |
+      Review the content for brand fit and effectiveness.
+
+      {{draft_content}}
+
+      Review criteria:
+      1. Tone consistency
+      2. Factual accuracy
+      3. Any sensitive or risky content
+      4. Concrete improvement suggestions
+    output: review_feedback
+    depends_on: [draft]
+
+  - id: final_edit
+    role: "marketing/marketing-content-creator"
+    task: |
+      Apply the brand review feedback and produce the final draft.
+
+      Original:
+      {{draft_content}}
+
+      Feedback:
+      {{review_feedback}}
+
+      Output the finalized article.
+    depends_on: [brand_review]

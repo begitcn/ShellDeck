@@ -13,6 +13,7 @@
 
 /* Begin PBXFileReference section */
 		DCE5EE952FC5371E00AB26F0 /* ShellDeck.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ShellDeck.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		DCE5FF002FCF000000AB26F0 /* ShellDeckTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ShellDeckTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -34,6 +35,13 @@
 			path = ShellDeck;
 			sourceTree = "<group>";
 		};
+		DCE5FF012FCF000000AB26F0 /* ShellDeckTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+			);
+			path = ShellDeckTests;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -46,6 +54,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		DCE5FF042FCF000000AB26F0 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -53,6 +68,7 @@
 			isa = PBXGroup;
 			children = (
 				DCE5EE972FC5371E00AB26F0 /* ShellDeck */,
+				DCE5FF012FCF000000AB26F0 /* ShellDeckTests */,
 				DCE5EE962FC5371E00AB26F0 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -61,6 +77,7 @@
 			isa = PBXGroup;
 			children = (
 				DCE5EE952FC5371E00AB26F0 /* ShellDeck.app */,
+				DCE5FF002FCF000000AB26F0 /* ShellDeckTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -93,6 +110,29 @@
 			productReference = DCE5EE952FC5371E00AB26F0 /* ShellDeck.app */;
 			productType = "com.apple.product-type.application";
 		};
+		DCE5FF022FCF000000AB26F0 /* ShellDeckTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = DCE5FF062FCF000000AB26F0 /* Build configuration list for PBXNativeTarget "ShellDeckTests" */;
+			buildPhases = (
+				DCE5FF032FCF000000AB26F0 /* Sources */,
+				DCE5FF042FCF000000AB26F0 /* Frameworks */,
+				DCE5FF052FCF000000AB26F0 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				DCE5FF0A2FCF000000AB26F0 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				DCE5FF012FCF000000AB26F0 /* ShellDeckTests */,
+			);
+			name = ShellDeckTests;
+			packageProductDependencies = (
+			);
+			productName = ShellDeckTests;
+			productReference = DCE5FF002FCF000000AB26F0 /* ShellDeckTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -105,6 +145,10 @@
 				TargetAttributes = {
 					DCE5EE942FC5371E00AB26F0 = {
 						CreatedOnToolsVersion = 26.5;
+					};
+					DCE5FF022FCF000000AB26F0 = {
+						CreatedOnToolsVersion = 26.5;
+						TestTargetID = DCE5EE942FC5371E00AB26F0;
 					};
 				};
 			};
@@ -128,12 +172,20 @@
 			projectRoot = "";
 			targets = (
 				DCE5EE942FC5371E00AB26F0 /* ShellDeck */,
+				DCE5FF022FCF000000AB26F0 /* ShellDeckTests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		DCE5EE932FC5371E00AB26F0 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		DCE5FF052FCF000000AB26F0 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -169,7 +221,32 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		DCE5FF032FCF000000AB26F0 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		DCE5FF0A2FCF000000AB26F0 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = DCE5EE942FC5371E00AB26F0 /* ShellDeck */;
+			targetProxy = DCE5FF0B2FCF000000AB26F0 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin PBXContainerItemProxy section */
+		DCE5FF0B2FCF000000AB26F0 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = DCE5EE8D2FC5371E00AB26F0 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = DCE5EE942FC5371E00AB26F0;
+			remoteInfo = ShellDeck;
+		};
+/* End PBXContainerItemProxy section */
 
 /* Begin XCBuildConfiguration section */
 		DCE5EE9E2FC5371E00AB26F0 /* Debug */ = {
@@ -362,6 +439,42 @@
 			};
 			name = Release;
 		};
+		DCE5FF072FCF000000AB26F0 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = MCR7XLP8BR;
+				GENERATE_INFOPLIST_FILE = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = com.chaogeek.ShellDeckTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/ShellDeck.app/Contents/MacOS/ShellDeck";
+				BUNDLE_LOADER = "$(TEST_HOST)";
+			};
+			name = Debug;
+		};
+		DCE5FF082FCF000000AB26F0 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = MCR7XLP8BR;
+				GENERATE_INFOPLIST_FILE = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = com.chaogeek.ShellDeckTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/ShellDeck.app/Contents/MacOS/ShellDeck";
+				BUNDLE_LOADER = "$(TEST_HOST)";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -379,6 +492,15 @@
 			buildConfigurations = (
 				DCE5EEA12FC5371E00AB26F0 /* Debug */,
 				DCE5EEA22FC5371E00AB26F0 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		DCE5FF062FCF000000AB26F0 /* Build configuration list for PBXNativeTarget "ShellDeckTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				DCE5FF072FCF000000AB26F0 /* Debug */,
+				DCE5FF082FCF000000AB26F0 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

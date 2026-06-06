@@ -79,6 +79,11 @@ struct ContentView: View {
                 sidebarSelection = .local(id)
             }
         }
+        .onChange(of: sidebarSelection) { _, newValue in
+            if case .local(let id) = newValue, localManager.activeSessionID != id {
+                localManager.activeSessionID = id
+            }
+        }
         .onAppear {
             if sidebarSelection == nil {
                 if let firstServer = servers.first {

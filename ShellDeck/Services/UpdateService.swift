@@ -232,7 +232,7 @@ public final class UpdateService {
         proc.waitUntilExit()
     }
     
-    private func isVersion(_ v1: String, greaterThan v2: String) -> Bool {
+    func isVersion(_ v1: String, greaterThan v2: String) -> Bool {
         let components1 = v1.split(separator: ".").compactMap { Int($0) }
         let components2 = v2.split(separator: ".").compactMap { Int($0) }
         

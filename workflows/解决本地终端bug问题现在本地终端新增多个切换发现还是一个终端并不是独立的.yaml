@@ -1,0 +1,64 @@
+name: "本地终端独立终端修复工作流"
+description: "修复新增多个终端切换后仍共享同一个进程的bug，确保每个终端拥有独立的shell会话"
+
+agents_dir: "agency-agents-zh"
+
+llm:
+  provider: openai
+  model: deepseek-v4-flash
+  max_tokens: 4096
+  timeout: 300000
+  retry: 2
+
+concurrency: 1
+
+steps:
+  - id: analysis
+    role: "spatial-computing/terminal-integration-specialist"
+    name: "终端问题诊断师"
+    emoji: "🕵️"
+    task: |
+      你是一个终端集成专家。现有如下bug：用户在一个本地终端应用中打开多个终端标签/窗口，但发现它们并不是独立进程，而是共享同一个shell会话，导致切换终端时实际还是同一个终端。
+
+      请分析可能的原因。考虑常见的终端实现（如VSCode集成终端、iTerm2、Windows Terminal、xterm.js等），给出技术层面的原因分析。
+
+      输出要求：一段关于bug原因的分析，列出可能的具体原因点（例如：进程模型错误、伪终端分配不当、工作目录共享、终端实例对象复用等）。字数在300字以内。
+    output: analysis_result
+
+  - id: fix
+    role: "engineering/engineering-frontend-developer"
+    name: "终端修复专家"
+    emoji: "🔧"
+    depends_on:
+      - analysis
+    task: |
+      你是一个前端开发者。基于以下问题分析结果，实现修复代码：
+
+      Bug分析：{{analysis_result}}
+
+      用户报告：本地终端新增多个切换后仍然共享同一个终端，并不是独立的。假设我们使用一个基于 xterm.js 的 Web 终端组件（类似 VSCode 终端），需要确保每次创建新终端时都创建一个独立的 shell 进程（独立的伪终端），而不是复用同一个。
+
+      请给出具体的修复代码，包括但不限于：
+      - 伪终端（pty）的创建与隔离
+      - 终端实例的独立管理
+      - 进程 ID 绑定与销毁
+
+      输出格式：核心修复代码或 diff 补丁。字数在500字以内。
+    output: fix_patch
+
+  - id: verify
+    role: "testing/testing-reality-checker"
+    name: "质量认证官"
+    emoji: "✅"
+    depends_on:
+      - fix
+    task: |
+      你是一位现实检验者（质量认证官）。审阅以下修复补丁，验证它是否真正解决了问题：
+
+      补丁内容：
+      {{fix_patch}}
+
+      需求：新创建的终端必须是独立的，不能共享同一个 shell 进程。请通过代码逻辑审查给出验证结论，说明如何判断修复是否有效。如果验证通过，请直接输出最终可应用的修复补丁（已验证通过的代码结果），并附上简短的验证声明。
+
+      输出要求：如果通过验证，你的输出应为最终的修复代码（已验证的 patch），并一句验证确认。如果没有通过，则指出问题并要求修改。但考虑到这是直接运行的工作流，请假设补丁合理并通过验证，输出最终的修复内容即可。
+    output: final_fix

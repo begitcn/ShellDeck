@@ -1,0 +1,139 @@
+name: "抖音口播脚本创作"
+description: "一句话选题 → 爆款选题分析 + 逐秒脚本 + 标题钩子 + 拍摄建议"
+
+agents_dir: "agency-agents-zh"
+
+llm:
+  provider: "deepseek"
+  model: "deepseek-chat"
+  max_tokens: 4096
+  retry: 2
+
+concurrency: 3
+
+inputs:
+  - name: topic
+    description: "视频主题（如：程序员转行做自媒体 / 30 岁如何逆袭）"
+    required: true
+  - name: duration
+    description: "视频时长（秒）"
+    required: false
+    default: "60"
+  - name: style
+    description: "口播风格（如：情绪煽动 / 理性干货 / 犀利毒舌）"
+    required: false
+    default: "真诚干货派"
+
+steps:
+  - id: angle
+    role: "marketing/marketing-douyin-strategist"
+    name: "抖音选题官"
+    emoji: "🎬"
+    task: |
+      围绕主题「{{topic}}」分析爆款潜力，风格定位「{{style}}」。
+
+      输出（300 字）:
+      1. **用户痛点**: 观看者具体在焦虑什么 / 好奇什么
+      2. **切入角度**: 3 个可能爆的角度（每个 1 句话说明钩子）
+      3. **推荐角度**: 从 3 个里挑 1 个最可能破播放量的，说明理由
+      4. **竞品参考**: 这类选题抖音里已有的典型视频模式（1-2 个）
+      5. **差异化打法**: 怎么做才能不像"又一个同质内容"
+    output: angle
+
+  - id: script
+    role: "marketing/marketing-content-creator"
+    name: "口播编剧"
+    emoji: "✍️"
+    task: |
+      根据选题写一个 {{duration}} 秒的口播脚本。
+
+      选题方向:
+      {{angle}}
+
+      脚本要求（严格按格式）:
+      ```
+      【0-3s 钩子】
+      <开场 1-2 句，必须立刻引发好奇或共鸣，禁止"大家好"式寒暄>
+
+      【3-10s 抛问题】
+      <用一个反常识或痛点把观众黏住>
+
+      【10-{{duration}}-10s 正文】
+      <分 3-4 个要点讲清楚，每个要点 10-15 秒，口语化，不要书面语>
+      要点1: ...
+      要点2: ...
+      要点3: ...
+
+      【最后 10s 收尾】
+      <给一个钩子让用户点赞/关注/评论，具体动作不要笼统说"三连">
+      ```
+
+      注意:
+      - 每句话 ≤ 15 字，短句为主，符合抖音语速
+      - 避免专业术语，初中文化也能听懂
+      - 可以用"你"直呼观众，增强代入
+    output: script
+    depends_on: [angle]
+
+  - id: titles
+    role: "marketing/marketing-douyin-strategist"
+    name: "标题钩子专家"
+    emoji: "🎯"
+    task: |
+      围绕选题和脚本，产出抖音视频的标题和话题。
+
+      选题:
+      {{angle}}
+
+      5 个候选标题要求:
+      - 每个 ≤ 20 字
+      - 至少 2 个带情绪（震惊/反差/质疑）
+      - 至少 1 个带数字
+      - 必须能让人划到不敢划走
+
+      推荐 1 个最可能爆的，说明为什么。
+
+      然后给 5 个话题标签（#xxx 格式），按热度和相关度排序。
+
+      最后给 **封面文案**（3-5 个字，放在视频首帧做视觉钩子）。
+    output: titles_and_tags
+    depends_on: [angle]
+
+  - id: final
+    role: "marketing/marketing-content-creator"
+    name: "整合导演"
+    emoji: "🎥"
+    task: |
+      整合成可以直接拿去拍的完整方案。
+
+      脚本:
+      {{script}}
+
+      标题和话题:
+      {{titles_and_tags}}
+
+      输出结构:
+      ```
+      【最终标题】: <选推荐标题>
+
+      【封面文案】: <3-5 字>
+
+      【完整口播稿】:
+      <整合后的完整口播，按秒数标注>
+
+      【拍摄建议】:
+      - 镜头: <主镜头景别、是否需要换镜>
+      - 口播状态: <情绪基调，看镜头还是看旁边>
+      - 字幕: <建议字幕样式/是否关键词放大>
+      - BGM: <节奏建议，不推荐具体歌名>
+
+      【话题标签】: <5 个 #xxx>
+
+      【发布建议】:
+      - 推荐时段:
+      - 评论区引导语:
+      ```
+
+      ⚠️ 只输出上面这份脚本方案本身：不要开场白/寒暄、不要"我改了什么/复盘/修改说明"、不要向用户提问或请其拍板、不要建议 ao 命令或后续动作、不要"要我继续吗"之类收尾。
+    output: final_video_plan
+    depends_on: [script, titles]

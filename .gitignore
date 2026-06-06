@@ -4,3 +4,6 @@ dist/
 *.xcuserdata
 *.xcworkspace/xcuserdata
 DerivedData/
+
+# agency-orchestrator local config
+.env

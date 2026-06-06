@@ -2,7 +2,7 @@ import SwiftUI
 import SwiftTerm
 import Darwin
 
-private final class FocusableLocalTerminalView: LocalProcessTerminalView {
+final class FocusableLocalTerminalView: LocalProcessTerminalView {
     private var lastUsableFrameSize: NSSize?
 
     override func setFrameSize(_ newSize: NSSize) {
@@ -10,8 +10,6 @@ private final class FocusableLocalTerminalView: LocalProcessTerminalView {
             if lastUsableFrameSize != nil {
                 return
             } else {
-                // Initial layout or tab switch before frame is resolved:
-                // set to a sensible default size instead of a collapsed tiny size
                 let defaultSize = NSSize(width: 800, height: 600)
                 super.setFrameSize(defaultSize)
                 lastUsableFrameSize = defaultSize
@@ -35,16 +33,16 @@ private final class FocusableLocalTerminalView: LocalProcessTerminalView {
     }
 }
 
-private final class LocalTerminalPaddingContainer: NSView {
-    let terminalView: FocusableLocalTerminalView
-    
+final class LocalTerminalPaddingContainer: NSView {
+    weak var terminalView: FocusableLocalTerminalView?
+
     init(terminalView: FocusableLocalTerminalView, padding: CGFloat = 5) {
         self.terminalView = terminalView
         super.init(frame: .zero)
-        
+
         terminalView.translatesAutoresizingMaskIntoConstraints = false
         addSubview(terminalView)
-        
+
         NSLayoutConstraint.activate([
             terminalView.topAnchor.constraint(equalTo: topAnchor),
             terminalView.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -padding),
@@ -52,103 +50,65 @@ private final class LocalTerminalPaddingContainer: NSView {
             terminalView.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -padding)
         ])
     }
-    
+
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
     }
-    
+
     override func layout() {
         super.layout()
-        let bg = terminalView.nativeBackgroundColor
-        self.wantsLayer = true
-        self.layer?.backgroundColor = bg.cgColor
+        if let terminalView = terminalView {
+            let bg = terminalView.nativeBackgroundColor
+            self.wantsLayer = true
+            self.layer?.backgroundColor = bg.cgColor
+        }
     }
-    
+
     override func draw(_ dirtyRect: NSRect) {
-        let bg = terminalView.nativeBackgroundColor
-        bg.setFill()
-        dirtyRect.fill()
+        if let terminalView = terminalView {
+            let bg = terminalView.nativeBackgroundColor
+            bg.setFill()
+            dirtyRect.fill()
+        }
     }
-    
+
     override func mouseDown(with event: NSEvent) {
-        window?.makeFirstResponder(terminalView)
+        if let terminalView = terminalView {
+            window?.makeFirstResponder(terminalView)
+        }
     }
 }
 
-struct LocalTerminalContainerView: NSViewRepresentable {
-    @Environment(LocalTerminalManager.self) var manager
-    let session: LocalTerminalSession
-    @Binding var isRunning: Bool
-    let isActive: Bool
+final class TerminalCoordinator: LocalProcessTerminalViewDelegate {
+    var session: LocalTerminalSession?
+    var onProcessTerminated: (() -> Void)?
+    var onDirectoryUpdate: ((String) -> Void)?
 
-    func makeCoordinator() -> Coordinator {
-        Coordinator()
+    func processTerminated(source: TerminalView, exitCode: Int32?) {
+        Task { @MainActor in
+            session?.isRunning = false
+            onProcessTerminated?()
+        }
     }
 
-    func makeNSView(context: Context) -> NSView {
-        let terminal = FocusableLocalTerminalView(frame: .zero)
-        terminal.processDelegate = context.coordinator
-        context.coordinator.session = session
-        context.coordinator.isRunningBinding = $isRunning
-        context.coordinator.onProcessTerminated = { [manager, sessionID = session.id] in
-            withAnimation {
-                manager.closeSession(id: sessionID)
-            }
-        }
-        context.coordinator.onDirectoryUpdate = { [manager, sessionID = session.id] dir in
-            manager.updateWorkingDirectory(id: sessionID, directory: dir)
-        }
-        TerminalAppearance.apply(to: terminal)
+    func sizeChanged(source: LocalProcessTerminalView, newCols: Int, newRows: Int) {}
 
-        // Set running state immediately on process start
-        DispatchQueue.main.async {
-            session.isRunning = true
-            isRunning = true
-        }
-
-        let shell = LocalShellResolver.defaultLoginShell()
-        let shellName = URL(fileURLWithPath: shell).lastPathComponent
-        let homeDir = FileManager.default.homeDirectoryForCurrentUser.path
-        DispatchQueue.main.async {
-            session.shellType = shellName
-            session.workingDirectory = abbreviateHome(homeDir)
-        }
-        terminal.startProcess(
-            executable: shell,
-            environment: LocalShellResolver.environment(for: shell),
-            execName: LocalShellResolver.loginShellName(for: shell)
-        )
-
-        let container = LocalTerminalPaddingContainer(terminalView: terminal)
-        return container
-    }
-
-    func updateNSView(_ nsView: NSView, context: Context) {
-        guard let container = nsView as? LocalTerminalPaddingContainer else { return }
-        let terminal = container.terminalView
-        
-        if isActive, let window = terminal.window, window.firstResponder != terminal {
-            DispatchQueue.main.async {
-                window.makeFirstResponder(terminal)
+    func setTerminalTitle(source: LocalProcessTerminalView, title: String) {
+        Task { @MainActor in
+            guard let session = session else { return }
+            if !session.isCustomTitle {
+                session.title = title
             }
         }
     }
 
-    static func dismantleNSView(_ nsView: NSView, coordinator: Coordinator) {
-        guard let container = nsView as? LocalTerminalPaddingContainer else { return }
-        container.terminalView.terminate()
-    }
-
-    private func abbreviateHome(_ path: String) -> String {
-        let homeDir = FileManager.default.homeDirectoryForCurrentUser.path
-        if path.hasPrefix(homeDir) {
-            return "~" + String(path.dropFirst(homeDir.count))
-        }
-        return path
+    func hostCurrentDirectoryUpdate(source: TerminalView, directory: String?) {
+        guard let dir = directory else { return }
+        onDirectoryUpdate?(dir)
     }
 }
 
-private enum LocalShellResolver {
+enum LocalShellResolver {
     static func defaultLoginShell() -> String {
         if let userShell = shellFromUserRecord(), isExecutable(userShell) {
             return userShell
@@ -222,35 +182,53 @@ private enum LocalShellResolver {
     }
 }
 
-extension LocalTerminalContainerView {
-    final class Coordinator: LocalProcessTerminalViewDelegate {
-        var session: LocalTerminalSession?
-        var isRunningBinding: Binding<Bool>?
-        var onProcessTerminated: (() -> Void)?
-        var onDirectoryUpdate: ((String) -> Void)?
+struct TerminalHostView: NSViewRepresentable {
+    let activeSessionID: UUID?
+    @Environment(LocalTerminalManager.self) var manager
 
-        func processTerminated(source: TerminalView, exitCode: Int32?) {
-            Task { @MainActor in
-                session?.isRunning = false
-                isRunningBinding?.wrappedValue = false
-                onProcessTerminated?()
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        view.wantsLayer = true
+        view.autoresizesSubviews = true
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        guard let activeID = activeSessionID else {
+            for (_, entry) in manager.terminalEntries {
+                entry.container.isHidden = true
             }
+            return
         }
 
-        func sizeChanged(source: LocalProcessTerminalView, newCols: Int, newRows: Int) {}
+        // 确保活跃 session 的终端视图已初始化
+        manager.setupTerminalIfNeeded(for: activeID)
 
-        func setTerminalTitle(source: LocalProcessTerminalView, title: String) {
-            Task { @MainActor in
-                guard let session = session else { return }
-                if !session.isCustomTitle {
-                    session.title = title
-                }
+        // 原则: 每个终端 NSView 只创建一次, 永不 removeFromSuperview
+        // 切换仅通过 isHidden 实现, 避免 SwiftTerm 渲染管道因视图树变更而中断
+        for (id, entry) in manager.terminalEntries {
+            let container = entry.container
+            if container.superview !== nsView {
+                container.frame = nsView.bounds
+                container.autoresizingMask = [.width, .height]
+                nsView.addSubview(container)
             }
+            container.isHidden = (id != activeID)
+            container.frame = nsView.bounds
         }
 
-        func hostCurrentDirectoryUpdate(source: TerminalView, directory: String?) {
-            guard let dir = directory else { return }
-            onDirectoryUpdate?(dir)
+        // 将 first responder 交给活跃终端
+        if let activeEntry = manager.terminalEntries[activeID],
+           let terminalView = activeEntry.container.terminalView,
+           let window = nsView.window,
+           window.firstResponder !== terminalView {
+            window.makeFirstResponder(terminalView)
+        }
+
+        // 清理已关闭 session 残留的容器 (sessions 中已移除但 terminalEntries 仍存在)
+        let aliveIDs = Set(manager.sessions.map(\.id))
+        for (id, entry) in manager.terminalEntries where !aliveIDs.contains(id) {
+            entry.container.removeFromSuperview()
         }
     }
 }

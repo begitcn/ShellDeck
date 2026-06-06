@@ -1,0 +1,99 @@
+name: "Competitor Analysis Report"
+description: "Trend research → data analysis + SEO scan → executive summary — a report ready to present"
+
+agents_dir: "agency-agents"
+
+llm:
+  provider: "deepseek"
+  model: "deepseek-chat"
+  max_tokens: 4096
+
+concurrency: 2
+
+inputs:
+  - name: product
+    description: "Your product / service name and brief"
+    required: true
+  - name: competitors
+    description: "Competitor names (comma-separated, e.g. Notion, Coda, ClickUp)"
+    required: true
+  - name: focus
+    description: "Focus areas (e.g. pricing, growth, feature gaps)"
+    required: false
+    default: "feature gaps, pricing, market positioning"
+
+steps:
+  - id: trend_research
+    role: "product/product-trend-researcher"
+    task: |
+      Research market trends for the product and its competitors.
+
+      Our product: {{product}}
+      Competitors: {{competitors}}
+      Focus: {{focus}}
+
+      Output:
+      1. Overall industry trends (3-5 key trends)
+      2. Notable moves by each competitor in the past 6 months (launches, funding, partnerships)
+      3. Market size and growth projection
+      4. Technology trends and inflection points
+    output: trend_report
+
+  - id: data_analysis
+    role: "support/support-analytics-reporter"
+    task: |
+      Based on the trend research, perform a quantitative competitor comparison.
+
+      {{trend_report}}
+
+      Competitors: {{competitors}}
+      Focus: {{focus}}
+
+      Output:
+      1. Feature comparison matrix (table: which has what, strong/weak)
+      2. Pricing comparison (free / paid / enterprise tiers)
+      3. User sentiment analysis (common praises and complaints)
+      4. SWOT (us vs each competitor)
+    output: data_report
+    depends_on: [trend_research]
+
+  - id: seo_scan
+    role: "marketing/marketing-seo-specialist"
+    task: |
+      Analyze competitors from an SEO and content-marketing angle.
+
+      {{trend_report}}
+
+      Competitors: {{competitors}}
+
+      Output:
+      1. Content strategy per competitor (blog cadence, topics, keyword targeting)
+      2. Search visibility comparison (who ranks for what)
+      3. Social media share-of-voice comparison
+      4. Content opportunities (valuable areas competitors are ignoring)
+    output: seo_report
+    depends_on: [trend_research]
+
+  - id: executive_summary
+    role: "support/support-executive-summary-generator"
+    task: |
+      Consolidate the analysis into an executive-ready summary.
+
+      ## Market Trends
+      {{trend_report}}
+
+      ## Data Comparison
+      {{data_report}}
+
+      ## SEO & Content
+      {{seo_report}}
+
+      Format:
+      1. **One-line verdict**: our competitive position
+      2. **Key findings** (3-5 bullets, 1-2 sentences each)
+      3. **Threats & opportunities** (3 each)
+      4. **Recommended actions** (prioritized, each with owner suggestion and timeframe)
+      5. **Full comparison table** (preserve the feature matrix)
+
+      Style: concise, data-driven, ready to present.
+    depends_on: [data_analysis, seo_scan]

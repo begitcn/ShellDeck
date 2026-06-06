@@ -1,0 +1,143 @@
+name: "法律咨询意见书"
+description: "事实梳理 + 合同/文书审查 + 风险识别 + 法律意见书"
+
+agents_dir: "agency-agents-zh"
+
+llm:
+  provider: "deepseek"
+  model: "deepseek-chat"
+  max_tokens: 4096
+  retry: 2
+
+concurrency: 3
+
+inputs:
+  - name: case_description
+    description: "案情或咨询事项描述（越详细越好）"
+    required: true
+  - name: document_content
+    description: "相关合同/文书内容（可选，支持 @文件）"
+    required: false
+    default: "（未提供文书，仅就案情给意见）"
+  - name: jurisdiction
+    description: "适用法域（默认中国大陆）"
+    required: false
+    default: "中华人民共和国（大陆）"
+
+steps:
+  - id: intake
+    role: "specialized/legal-client-intake"
+    name: "法务助理"
+    emoji: "📋"
+    task: |
+      梳理案情并提取关键事实。
+
+      咨询事项:
+      {{case_description}}
+
+      相关文书:
+      {{document_content}}
+
+      适用法域: {{jurisdiction}}
+
+      输出（300-400 字）:
+      1. **当事人关系**: 涉及哪些主体，彼此什么法律关系
+      2. **核心事实**: 按时间顺序梳理的事实链（不要添油加醋）
+      3. **争议焦点**: 本案的法律争议点（1-3 个）
+      4. **诉求识别**: 咨询人实际想解决什么问题（经济补偿/继续履约/解除关系/追责）
+      5. **信息缺口**: 还需要当事人补充哪些关键信息才能给出完整意见
+    output: case_summary
+
+  - id: document_review
+    role: "legal/legal-contract-reviewer"
+    name: "合同/文书审查"
+    emoji: "📄"
+    task: |
+      审查相关文书中的法律风险。
+
+      案情梳理:
+      {{case_summary}}
+
+      文书内容:
+      {{document_content}}
+
+      如果没有提供文书，直接输出「未提供文书，跳过审查」。
+
+      否则输出（300-400 字）:
+      1. **文书性质**: 是什么类型的合同/文书，是否合法有效
+      2. **条款风险 Top 3**: 最不利于咨询人的条款（引用原文片段）
+      3. **缺失条款**: 应该有但没有的关键条款（违约责任/管辖/解除条件等）
+      4. **模糊表述**: 可能引发歧义的措辞
+      5. **整体评级**: 对咨询人是否有利（有利/中性/不利/极不利）
+    output: document_risks
+    depends_on: [intake]
+
+  - id: legal_risk
+    role: "specialized/legal-document-review"
+    name: "诉讼风险顾问"
+    emoji: "⚖️"
+    task: |
+      分析案情走诉讼或其他法律救济的可行性与风险。
+
+      案情:
+      {{case_summary}}
+
+      文书风险:
+      {{document_risks}}
+
+      适用法域: {{jurisdiction}}
+
+      输出（400 字）:
+      1. **法律依据**: 支持咨询人诉求的主要法条（具体条款号，不确定请标"需核实"）
+      2. **胜诉概率预估**: 高/中/低，说明理由
+      3. **证据评估**: 现有证据是否足够，还需补充什么
+      4. **诉讼成本**: 时间（月）、金钱（诉讼费/律师费区间）、精力投入
+      5. **替代方案**: 协商/调解/仲裁等非诉讼路径是否更优
+      6. **时效提醒**: 诉讼时效或除斥期间是否紧迫
+
+      ⚠️ 所有法条引用不确定处必须明确标「需核实最新法规」。
+    output: risk_analysis
+    depends_on: [intake, document_review]
+
+  - id: opinion
+    role: "legal/legal-policy-writer"
+    name: "主办律师"
+    emoji: "💼"
+    task: |
+      综合所有分析，出具正式法律意见书。
+
+      案情: {{case_summary}}
+      文书风险: {{document_risks}}
+      诉讼分析: {{risk_analysis}}
+
+      输出格式（严格按正式意见书结构）:
+      ```
+      # 法律意见书
+
+      ## 一、咨询事项
+      <简述>
+
+      ## 二、事实摘要
+      <基于案情梳理的关键事实>
+
+      ## 三、法律分析
+      <引用法条，结合事实分析，2-3 段>
+
+      ## 四、结论意见
+      <明确的法律结论：是否有理/是否违约/是否可诉等>
+
+      ## 五、行动建议
+      按优先级列出 3-5 条:
+      1. <立即行动 - 如固定证据/发函/申请保全>
+      2. <短期行动 - 如协商/起诉/申请仲裁>
+      3. <备选方案>
+
+      ## 六、风险提示
+      <2-3 条可能的不利结果>
+
+      ## 七、免责声明
+      本意见书基于咨询人提供的信息作出，若事实有出入结论可能不同。本意见
+      不能替代律师介入后的个案分析，重要决定请委托执业律师办理。
+      ```
+    output: legal_opinion
+    depends_on: [document_review, legal_risk]

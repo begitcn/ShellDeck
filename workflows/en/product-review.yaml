@@ -1,0 +1,116 @@
+name: "Product Requirements Review"
+description: "Multi-role PRD review — PM analyzes requirements, architect assesses tech, UX researcher assesses experience, then synthesis"
+
+agents_dir: "agency-agents"
+
+llm:
+  provider: "deepseek"
+  model: "deepseek-chat"
+  max_tokens: 4096
+  timeout: 120000
+  retry: 3
+
+concurrency: 2
+
+inputs:
+  - name: prd_content
+    description: "PRD document content"
+    required: true
+
+steps:
+  - id: analyze
+    role: "product/product-manager"
+    task: |
+      Analyze the following PRD and output a structured review.
+
+      PRD:
+      {{prd_content}}
+
+      Format (markdown):
+
+      ### Core Requirements (ranked P0/P1/P2)
+      - P0: ...
+      - P1: ...
+
+      ### Target User Persona
+      User type | Core pain point | Use case
+
+      ### Risks & Uncertainties
+      - [high/medium/low] risk description → suggested validation
+
+      ### Key Success Metrics
+      - Metric | Target | How measured
+    output: requirements
+
+  - id: tech_review
+    role: "engineering/engineering-software-architect"
+    task: |
+      Based on the requirements analysis, assess technical feasibility.
+
+      Requirements:
+      {{requirements}}
+
+      Format (markdown):
+
+      ### Feasibility Score: [high / medium / low]
+
+      ### Recommended Architecture
+      Core components and interactions (3-5 sentences)
+
+      ### Build Complexity
+      | Module | Complexity (1-5) | Est. person-days | Main challenges |
+
+      ### Technical Risks
+      - [high/medium/low] risk → mitigation
+    output: tech_report
+    depends_on: [analyze]
+
+  - id: design_review
+    role: "design/design-ux-researcher"
+    task: |
+      Based on the requirements analysis, evaluate UX.
+
+      Requirements:
+      {{requirements}}
+
+      Format (markdown):
+
+      ### UX Risks
+      - [high/medium/low] risk → scope of impact
+
+      ### Usability Issues
+      - Issue → proposed solution
+
+      ### Top 3 Design Recommendations
+      1. Recommendation → expected impact
+
+      ### Assumptions to Validate
+      - Assumption → validation method (user interviews / A-B test / prototype)
+    output: design_report
+    depends_on: [analyze]
+
+  - id: final_summary
+    role: "product/product-manager"
+    task: |
+      Synthesize tech and design feedback into a final verdict.
+
+      ## Tech Review
+      {{tech_report}}
+
+      ## Design Review
+      {{design_report}}
+
+      Format (markdown):
+
+      ### Verdict: [✅ Approved / ⚠️ Needs changes / ❌ Rejected]
+
+      ### Must Resolve (before merge)
+      1. [source: tech/design] issue → proposed fix
+
+      ### Suggested Improvements (later iteration)
+      1. Issue → priority
+
+      ### Next Actions
+      - [ ] Action item | Owner | Suggested timeline
+    output: final_report
+    depends_on: [tech_review, design_review]

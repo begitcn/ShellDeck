@@ -1,0 +1,119 @@
+name: "PR Code Review"
+description: "Three-dimensional parallel review: code quality, security, performance → unified verdict"
+
+agents_dir: "agency-agents"
+
+llm:
+  provider: deepseek
+  model: deepseek-chat
+  max_tokens: 4096
+
+concurrency: 3
+
+inputs:
+  - name: pr_diff
+    description: "PR diff content (code changes)"
+    required: true
+  - name: pr_description
+    description: "PR description (what changed, why, scope of impact)"
+    required: true
+
+steps:
+  - id: code_quality
+    role: "engineering/engineering-code-reviewer"
+    task: |
+      Review the following PR for code quality.
+
+      ## PR Description
+      {{pr_description}}
+
+      ## Code Changes
+      {{pr_diff}}
+
+      Evaluate across these dimensions:
+      1. **Style & conventions**: naming clarity, consistency, adherence to project conventions
+      2. **Logic correctness**: edge cases, error handling, logical flaws
+      3. **Maintainability**: complexity, function decomposition, duplication
+      4. **Readability**: comment quality, intent clarity
+      5. **Test coverage**: critical paths, edge cases
+
+      For each dimension provide a score (1-5) and a concrete list of issues.
+    output: quality_report
+
+  - id: security_check
+    role: "engineering/engineering-security-engineer"
+    task: |
+      Review the following PR for security risks.
+
+      ## PR Description
+      {{pr_description}}
+
+      ## Code Changes
+      {{pr_diff}}
+
+      Focus on:
+      1. **Injection risks**: SQL injection, XSS, command injection, etc.
+      2. **Authn/authz**: permission checks, privilege escalation paths
+      3. **Data security**: sensitive data encryption, log leakage
+      4. **Dependency safety**: newly introduced packages with known CVEs
+      5. **Config safety**: hardcoded secrets, insecure defaults
+
+      For each issue mark severity (high/medium/low) and give a remediation suggestion.
+    output: security_report
+
+  - id: perf_check
+    role: "testing/testing-performance-benchmarker"
+    task: |
+      Review the following PR for performance impact.
+
+      ## PR Description
+      {{pr_description}}
+
+      ## Code Changes
+      {{pr_diff}}
+
+      Focus on:
+      1. **Algorithmic efficiency**: time/space complexity
+      2. **Resource usage**: memory, file handles, DB connections
+      3. **Concurrency safety**: race conditions, deadlock risk
+      4. **I/O performance**: N+1 queries, redundant calls
+      5. **Caching opportunities**: cacheable paths that aren't cached
+
+      For each finding, include an impact estimate and an optimization suggestion.
+    output: perf_report
+
+  - id: summary
+    role: "engineering/engineering-code-reviewer"
+    task: |
+      Synthesize the three reviews into a final verdict.
+
+      ## Code Quality
+      {{quality_report}}
+
+      ## Security
+      {{security_report}}
+
+      ## Performance
+      {{perf_report}}
+
+      Output (markdown):
+
+      ### Verdict: [✅ Mergeable / ⚠️ Needs changes / ❌ Needs rewrite]
+
+      ### Scorecard
+      | Dimension | Score (1-5) | Key findings |
+      |-----------|-------------|--------------|
+      | Code quality | | |
+      | Security | | |
+      | Performance | | |
+
+      ### Must fix (blocking)
+      1. [severity] issue → fix suggestion
+
+      ### Nice to have (non-blocking)
+      1. issue → suggestion
+
+      ### Highlights
+      - Things worth calling out positively
+    depends_on: [code_quality, security_check, perf_check]
+    output: final_review

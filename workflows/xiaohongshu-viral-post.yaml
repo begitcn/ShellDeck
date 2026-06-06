@@ -1,0 +1,103 @@
+name: "小红书爆款笔记创作"
+description: "一句话主题 → 策略分析 + 文案撰写 + SEO 标题 + 整合成稿"
+
+agents_dir: "agency-agents-zh"
+
+llm:
+  provider: "deepseek"
+  model: "deepseek-chat"
+  max_tokens: 4096
+  retry: 2
+
+concurrency: 3
+
+inputs:
+  - name: topic
+    description: "笔记主题（如：秋季穿搭技巧 / 职场新人避坑指南）"
+    required: true
+  - name: target_audience
+    description: "目标人群（如：25-35 岁女性白领，可选）"
+    required: false
+    default: "小红书主流用户（女性为主，关注生活方式）"
+
+steps:
+  - id: strategy
+    role: "marketing/marketing-xiaohongshu-specialist"
+    name: "小红书策略师"
+    emoji: "📱"
+    task: |
+      围绕主题「{{topic}}」做爆款策略分析，目标人群：{{target_audience}}。
+
+      输出结构（300-400 字）:
+      1. **选题角度**：3 个具体的切入角度，每个说明爆款潜力
+      2. **情绪钩子**：应该激发用户什么情绪（共鸣 / 焦虑 / 好奇 / 获得感）
+      3. **内容骨架**：建议的内容结构（开头钩子→主体价值→结尾互动）
+      4. **互动设计**：让用户评论/收藏的 1 个具体触发点
+    output: strategy
+
+  - id: copy
+    role: "marketing/marketing-content-creator"
+    name: "文案创作"
+    emoji: "✍️"
+    task: |
+      根据策略写一篇小红书正文（500-700 字）。
+
+      策略要点：
+      {{strategy}}
+
+      正文要求：
+      - 开头 1 句话抓人（不要寒暄、不要自我介绍）
+      - 用"我"视角讲亲身经历或观察，真实感
+      - 分 3-5 个小节，每节有明确价值点
+      - 夹杂 emoji 让视觉轻盈（不要堆砌）
+      - 结尾 1 句引导评论/收藏
+    output: post_body
+    depends_on: [strategy]
+
+  - id: title
+    role: "marketing/marketing-baidu-seo-specialist"
+    name: "标题+标签专家"
+    emoji: "🎯"
+    task: |
+      围绕主题「{{topic}}」和策略要点，产出:
+
+      1. **5 个候选标题**（每个 ≤20 字）：
+         - 至少 2 个带数字
+         - 至少 1 个带对比反差
+         - 至少 1 个带结果承诺
+      2. **推荐标题**：从 5 个里选 1 个最可能爆的，说明理由
+      3. **10 个话题标签**：按搜索量和相关性排序（#xxx 格式）
+
+      参考策略：
+      {{strategy}}
+    output: title_and_tags
+    depends_on: [strategy]
+
+  - id: final
+    role: "marketing/marketing-content-creator"
+    name: "整合发稿"
+    emoji: "📝"
+    task: |
+      把下面内容整合成一篇可以直接发布的小红书笔记。
+
+      标题和标签：
+      {{title_and_tags}}
+
+      正文：
+      {{post_body}}
+
+      输出格式（严格按此结构）:
+      ```
+      【标题】：<选用推荐标题>
+
+      【正文】：
+      <完整正文，可微调以适配标题>
+
+      【话题标签】：
+      <10 个标签，每个前面加 #，用空格分隔>
+
+      【发布建议】：
+      <2-3 行，包含建议发布时间、是否配图、评论区引导语>
+      ```
+    output: final_post
+    depends_on: [copy, title]

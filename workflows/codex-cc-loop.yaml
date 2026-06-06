@@ -1,0 +1,48 @@
+name: "Codex + Claude Code 协作编程(闭环版)"
+
+# 顶层 llm 必填。CLI 类 provider 的 model 可留空 ""
+llm:
+  provider: codex-cli
+  model: ""
+
+concurrency: 1   # CLI provider 共享账户额度,引擎会强制串行
+
+inputs:
+  - name: requirement
+    required: true
+
+steps:
+  # ① Codex:规划 + 定标准
+  - id: plan
+    role: "engineering/engineering-backend-architect"
+    task: "针对以下需求做技术规划,给出实现思路、模块拆分和验收标准:{{requirement}}"
+    output: plan_doc
+    llm: { provider: codex-cli, model: "" }
+
+  # ② Claude Code:首次实现(depends_on 自动接力)
+  - id: implement
+    role: "engineering/engineering-rapid-prototyper"
+    task: "严格按下面的规划与验收标准实现代码:{{plan_doc}}"
+    depends_on: [plan]
+    output: code
+    llm: { provider: claude-code, model: "" }
+
+  # ③ Codex:复核当前代码(循环区间起点,fix 会跳回这里)
+  - id: review
+    role: "testing/testing-reality-checker"
+    task: "对照验收标准复核代码。通过则输出 APPROVED,否则列出具体问题。标准:{{plan_doc}}  代码:{{code}}"
+    depends_on: [implement]
+    output: review_result
+    llm: { provider: codex-cli, model: "" }
+
+  # ④ Claude Code:按复核意见修复;未 APPROVED 则跳回 ③ 重审,最多 3 轮
+  - id: fix
+    role: "engineering/engineering-rapid-prototyper"
+    task: "根据复核意见修改代码(已通过则原样保留):{{review_result}}  原代码:{{code}}"
+    depends_on: [review]
+    output: code
+    llm: { provider: claude-code, model: "" }
+    loop:
+      back_to: review
+      max_iterations: 3
+      exit_condition: "{{review_result}} contains APPROVED"

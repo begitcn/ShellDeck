@@ -1,0 +1,194 @@
+name: "Solo Founder All-Hands"
+description: "One sentence in, 8 AI 'departments' collaborate, full launch plan out in 2 minutes — your one-person company"
+
+agents_dir: "agency-agents"
+
+llm:
+  provider: deepseek
+  model: deepseek-chat
+
+concurrency: 4
+
+inputs:
+  - name: idea
+    description: "Your one-sentence idea (e.g. a tool that auto-generates invoices for freelancers)"
+    required: true
+
+steps:
+  # ── Layer 1: CEO sets direction ──
+  - id: ceo_kickoff
+    role: "strategy/nexus-strategy"
+    name: "CEO"
+    emoji: "👔"
+    task: |
+      You are the CEO of this one-person company. Kick off the all-hands.
+
+      Founder's idea: {{idea}}
+
+      Output:
+      1. Product positioning in one sentence
+      2. What pain point we're solving
+      3. Who the target user is
+      4. What success looks like in 6 months
+
+      Tone: like a CEO at a morning standup — concise, concrete, no corporate fluff.
+    output: vision
+
+  # ── Layer 2: four departments research in parallel ──
+  - id: market_research
+    role: "product/product-trend-researcher"
+    name: "Market Researcher"
+    emoji: "📊"
+    task: |
+      The CEO just set direction: {{vision}}
+
+      As the trend researcher, do rapid market research:
+      1. Market size and growth rate for this category
+      2. Top 3 competitors + their strengths/weaknesses
+      3. Where the market gap is
+      4. Trend forecast for the next 12 months
+
+      Every point must be concrete — real numbers, real reasoning, no generic filler.
+    output: market_insight
+    depends_on: [ceo_kickoff]
+
+  - id: user_research
+    role: "design/design-ux-researcher"
+    name: "User Researcher"
+    emoji: "🔍"
+    task: |
+      The CEO just set direction: {{vision}}
+
+      As the user researcher, deliver user insights:
+      1. Core user personas (2 typical users, specific about age, profession, mindset)
+      2. How they currently solve this problem (existing solutions and their flaws)
+      3. Top 3 pain points (scene-specific, not abstract)
+      4. Key trigger that makes them willing to pay
+    output: user_insight
+    depends_on: [ceo_kickoff]
+
+  - id: tech_feasibility
+    role: "engineering/engineering-backend-architect"
+    name: "Tech Lead"
+    emoji: "💻"
+    task: |
+      The CEO just set direction: {{vision}}
+
+      As the tech architect, assess feasibility:
+      1. Recommended stack (something one person can own — explain why this not that)
+      2. MVP architecture (clear module relationships, no over-engineering)
+      3. 4-week build plan (week-by-week with deliverables)
+      4. Real technical risks and mitigations (the ones you'll actually hit, not textbook lists)
+    output: tech_plan
+    depends_on: [ceo_kickoff]
+
+  - id: brand_design
+    role: "design/design-brand-guardian"
+    name: "Brand Director"
+    emoji: "🎨"
+    task: |
+      The CEO just set direction: {{vision}}
+
+      As the brand designer, deliver the brand foundation:
+      1. Product name candidates (3 options + rationale; memorable and domain-available)
+      2. Brand tone and keywords
+      3. Slogan candidates (3 options; conversational and sticky)
+      4. Visual direction (palette + typography with specific hex codes)
+    output: brand_plan
+    depends_on: [ceo_kickoff]
+
+  # ── Layer 3: three planning functions run in parallel on research ──
+  - id: product_plan
+    role: "product/product-manager"
+    name: "Product Manager"
+    emoji: "🧭"
+    task: |
+      Research is in:
+
+      **Market**: {{market_insight}}
+      **User**: {{user_insight}}
+
+      As the PM, output MVP plan:
+      1. 3 core features (who uses each, what problem it solves)
+      2. Top 5 user stories
+      3. Priority + tradeoffs (explain what you're cutting and why)
+      4. Launch criteria (concrete, measurable definition of "usable")
+    output: product_spec
+    depends_on: [market_research, user_research]
+
+  - id: marketing_plan
+    role: "marketing/marketing-content-creator"
+    name: "Marketing Lead"
+    emoji: "📣"
+    task: |
+      Research is in:
+
+      **Market**: {{market_insight}}
+      **User**: {{user_insight}}
+      **Brand**: {{brand_plan}}
+
+      As the marketing lead, output a cold-start plan:
+      1. Launch copy (hooky headline, shareable body)
+      2. Top 3 launch channels + tactics (specific, not generic)
+      3. Zero-budget growth strategy (executable — no "make great content" fluff)
+      4. Week-by-week goals and actions for month one
+    output: marketing_spec
+    depends_on: [market_research, user_research, brand_design]
+
+  - id: finance_plan
+    role: "finance/finance-fpa-analyst"
+    name: "CFO"
+    emoji: "💰"
+    task: |
+      Research is in:
+
+      **Market**: {{market_insight}}
+      **Tech**: {{tech_plan}}
+
+      As the financial advisor, output the business model:
+      1. Pricing strategy (free vs paid tiers, pricing logic)
+      2. Cost structure (monthly fixed costs, line-by-line)
+      3. Revenue forecast (3/6/12 months with key assumptions and math)
+      4. Break-even analysis (how many users / how much revenue to survive)
+    output: finance_spec
+    depends_on: [market_research, tech_feasibility]
+
+  # ── Layer 4: CEO decides ──
+  - id: ceo_decision
+    role: "strategy/nexus-strategy"
+    name: "CEO"
+    emoji: "👔"
+    task: |
+      All-hands reports are in:
+
+      **Market**: {{market_insight}}
+      **User**: {{user_insight}}
+      **Tech**: {{tech_plan}}
+      **Brand**: {{brand_plan}}
+      **Product**: {{product_spec}}
+      **Marketing**: {{marketing_spec}}
+      **Finance**: {{finance_spec}}
+
+      As the CEO, make the final call. Output "One-Person Company Launch Plan":
+
+      ## Decision
+      Go or No-Go? One-sentence reason.
+
+      ## Product Name
+      Pick one from brand options and explain why.
+
+      ## Week One Action List
+      Day-by-day, concrete enough to execute.
+
+      ## Time Allocation
+      How to split your time (product / engineering / marketing %).
+
+      ## Risk Watch
+      Top 3 risks + mitigation.
+
+      ## Note to Self
+      As a solo founder, what to hold on to and what to avoid.
+
+      Every section must have a clear decision and rationale. No hedging. Action items must be executable — no "do great work" filler.
+    output: launch_plan
+    depends_on: [product_plan, marketing_plan, finance_plan]

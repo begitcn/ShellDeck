@@ -1,0 +1,116 @@
+name: "简历优化与面试准备"
+description: "简历诊断 → 简历重写 + 面试问题预测 + STAR 答题框架"
+
+agents_dir: "agency-agents-zh"
+
+llm:
+  provider: "deepseek"
+  model: "deepseek-chat"
+  max_tokens: 4096
+  retry: 2
+
+concurrency: 3
+
+inputs:
+  - name: resume_content
+    description: "当前简历内容（纯文本粘贴即可，支持 @文件）"
+    required: true
+  - name: target_role
+    description: "目标岗位（如：字节跳动高级产品经理 / 腾讯后端开发）"
+    required: true
+  - name: job_description
+    description: "目标岗位 JD（可选，越具体越好）"
+    required: false
+    default: "（未提供 JD，请按目标岗位的行业通用要求分析）"
+
+steps:
+  - id: diagnose
+    role: "hr/hr-recruiter"
+    name: "资深 HR"
+    emoji: "👔"
+    task: |
+      作为招聘过 {{target_role}} 的资深 HR，诊断以下简历的问题。
+
+      目标岗位: {{target_role}}
+      JD 参考: {{job_description}}
+
+      简历内容:
+      {{resume_content}}
+
+      输出（300-400 字）:
+      1. **硬伤 Top 3**: 最影响通过初筛的 3 个问题（每个 1 句话 + 为什么）
+      2. **优势盘点**: 简历里最有价值的 2-3 个点（应当被放大）
+      3. **ATS 关键词缺失**: 目标岗位必备但简历未提及的关键词（10 个以内）
+      4. **简历整体得分**: 按招聘官视角打 0-10 分，并说明扣分点
+    output: diagnosis
+
+  - id: rewrite
+    role: "hr/hr-recruiter"
+    name: "简历优化师"
+    emoji: "✍️"
+    task: |
+      根据诊断结果重写简历。
+
+      诊断:
+      {{diagnosis}}
+
+      原简历:
+      {{resume_content}}
+
+      目标岗位: {{target_role}}
+
+      重写要求:
+      - 每条工作经历改写成 STAR 结构的 bullet（用数字和结果说话）
+      - 补齐 ATS 关键词，但不要堆砌
+      - 砍掉与目标岗位无关的内容
+      - 技能栏按目标岗位重排序
+      - 输出 markdown 格式的完整简历，直接可用
+    output: new_resume
+    depends_on: [diagnose]
+
+  - id: predict_questions
+    role: "hr/hr-recruiter"
+    name: "面试官"
+    emoji: "❓"
+    task: |
+      预测 {{target_role}} 面试中高概率会问的问题。
+
+      参考诊断里的"硬伤"和"优势"，尤其要覆盖硬伤的追问:
+      {{diagnosis}}
+
+      JD:
+      {{job_description}}
+
+      输出 10 个问题，按以下 4 类各 2-3 个:
+      - **基础能力类**: 岗位硬技能
+      - **项目深挖类**: 简历中最可能被刨根问底的点
+      - **硬伤追问类**: 针对诊断里的硬伤，HR 会怎么问
+      - **软素质类**: 团队协作、抗压、冲突处理
+
+      每个问题注明「考察意图」。
+    output: interview_questions
+    depends_on: [diagnose]
+
+  - id: star_answers
+    role: "hr/hr-performance-reviewer"
+    name: "答题教练"
+    emoji: "🎯"
+    task: |
+      为下面每个面试问题写一个 STAR 答题框架（不是模板答案，是答题思路）。
+
+      问题列表:
+      {{interview_questions}}
+
+      候选人背景:
+      {{new_resume}}
+
+      每个问题输出:
+      - **S (情境)**: 要提及的背景（1 句）
+      - **T (任务)**: 要凸显的责任（1 句）
+      - **A (行动)**: 应该讲的 2-3 个关键动作
+      - **R (结果)**: 要突出的数字或成果
+      - **⚠️ 避雷**: 这题最容易踩的 1 个坑
+
+      保持简洁，每题 5-6 行。
+    output: final_prep
+    depends_on: [rewrite, predict_questions]

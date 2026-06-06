@@ -232,23 +232,31 @@ struct ServerSidebarView: View {
                 }
             }
         } header: {
-            HStack(spacing: 4) {
-                Image(systemName: expandedGroups.contains(localTerminalSectionID) ? "chevron.down" : "chevron.right")
-                    .foregroundStyle(.tertiary)
-                    .font(.caption2)
-                    .frame(width: 8)
-                Text("本地终端")
-                    .font(.subheadline)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(.primary)
-                if !items.isEmpty {
-                    Text("\(items.count)")
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
-                        .padding(.horizontal, 5)
-                        .background(.quaternary)
-                        .clipShape(Capsule())
+            HStack(spacing: 0) {
+                Button {
+                    toggleGroup(localTerminalSectionID)
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: expandedGroups.contains(localTerminalSectionID) ? "chevron.down" : "chevron.right")
+                            .foregroundStyle(.tertiary)
+                            .font(.caption2)
+                            .frame(width: 8)
+                        Text("本地终端")
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                            .foregroundStyle(.primary)
+                        if !items.isEmpty {
+                            Text("\(items.count)")
+                                .font(.caption2)
+                                .foregroundStyle(.tertiary)
+                                .padding(.horizontal, 5)
+                                .background(.quaternary)
+                                .clipShape(Capsule())
+                        }
+                    }
+                    .contentShape(Rectangle())
                 }
+                .buttonStyle(.plain)
                 Spacer()
                 Button { onNewLocalSession() } label: {
                     Image(systemName: "plus")
@@ -269,7 +277,6 @@ struct ServerSidebarView: View {
             .padding(.horizontal, 2)
             .padding(.top, 4)
             .contentShape(Rectangle())
-            .onTapGesture { toggleGroup(localTerminalSectionID) }
         }
     }
 

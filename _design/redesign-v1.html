@@ -1,0 +1,1018 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ShellDeck UI Redesign · 设计探索</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #1a1a1e;
+  --surface: #222226;
+  --surface-raised: #2a2a2e;
+  --border: #323236;
+  --text-primary: #f0f0f0;
+  --text-secondary: #909098;
+  --text-tertiary: #606068;
+  --accent: #4f8ef7;
+  --accent-dim: #3a6fc7;
+  --green: #4cd964;
+  --red: #ff4757;
+  --orange: #ff9500;
+  --sidebar-w: 260px;
+  --header-h: 44px;
+  --radius: 8px;
+  --radius-sm: 6px;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'PingFang SC', sans-serif;
+  background: var(--bg);
+  color: var(--text-primary);
+  display: flex;
+  justify-content: center;
+  padding: 32px 20px;
+  min-height: 100vh;
+}
+
+/* ============ Mac Window Frame ============ */
+.mac-window {
+  width: 1200px;
+  max-width: 100%;
+  background: var(--bg);
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+}
+
+.window-titlebar {
+  height: var(--header-h);
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  -webkit-app-region: drag;
+  user-select: none;
+}
+
+.traffic-lights { display: flex; gap: 8px; margin-right: 12px; }
+.traffic-light { width: 12px; height: 12px; border-radius: 50%; }
+.traffic-light.red { background: #ff5f57; }
+.traffic-light.yellow { background: #febc2e; }
+.traffic-light.green { background: #28c840; }
+
+.window-title {
+  flex: 1;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  letter-spacing: 0.3px;
+}
+
+/* ============ Layout ============ */
+.app-grid {
+  display: grid;
+  grid-template-columns: var(--sidebar-w) 1fr;
+  height: 680px;
+}
+
+/* ============ Sidebar ============ */
+.sidebar {
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.sidebar-header {
+  padding: 12px 14px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.mode-switcher {
+  display: flex;
+  background: var(--bg);
+  border-radius: var(--radius-sm);
+  padding: 2px;
+}
+
+.mode-btn {
+  flex: 1;
+  padding: 5px 8px;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  border-radius: 5px;
+  cursor: pointer;
+  transition: all 0.15s;
+  border: none;
+  background: transparent;
+}
+.mode-btn.active {
+  background: var(--accent);
+  color: white;
+}
+.mode-btn:not(.active):hover { color: var(--text-primary); }
+
+.search-box {
+  position: relative;
+}
+.search-box input {
+  width: 100%;
+  padding: 6px 10px 6px 28px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 12px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.search-box input::placeholder { color: var(--text-tertiary); }
+.search-box input:focus { border-color: var(--accent); }
+.search-box .icon {
+  position: absolute;
+  left: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 12px;
+  color: var(--text-tertiary);
+  pointer-events: none;
+}
+
+/* ============ Server List ============ */
+.server-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 6px 8px;
+}
+.server-list::-webkit-scrollbar { width: 4px; }
+.server-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+.group-header {
+  display: flex;
+  align-items: center;
+  padding: 6px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  user-select: none;
+  border-radius: 4px;
+}
+.group-header:hover { color: var(--text-secondary); }
+.group-header .arrow { margin-right: 4px; font-size: 8px; transition: transform 0.15s; }
+.group-header .arrow.open { transform: rotate(90deg); }
+.group-header .count {
+  margin-left: auto;
+  background: var(--border);
+  padding: 0 6px;
+  border-radius: 8px;
+  font-size: 10px;
+}
+
+.server-item {
+  display: flex;
+  align-items: center;
+  padding: 7px 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  gap: 8px;
+  transition: all 0.1s;
+  margin: 1px 0;
+}
+.server-item:hover { background: var(--surface-raised); }
+.server-item.active { background: var(--accent); }
+.server-item.active .server-name { color: white; }
+.server-item.active .server-sub { color: rgba(255,255,255,0.7); }
+.server-item.active .status-dot { border-color: white; }
+
+.status-dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  border: 1.5px solid transparent;
+  transition: all 0.2s;
+}
+.status-dot.disconnected { background: var(--text-tertiary); }
+.status-dot.connecting { background: var(--orange); animation: pulse 1s infinite; }
+.status-dot.connected { background: var(--green); }
+.status-dot.failed { background: var(--red); }
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.server-info { flex: 1; min-width: 0; }
+.server-name { font-size: 13px; font-weight: 500; line-height: 1.3; }
+.server-sub { font-size: 11px; color: var(--text-tertiary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.server-badge {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--border);
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.connect-btn {
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  transition: all 0.15s;
+  flex-shrink: 0;
+}
+.connect-btn:hover { background: var(--accent); color: white; border-color: var(--accent); }
+.server-item.active .connect-btn { border-color: rgba(255,255,255,0.3); color: rgba(255,255,255,0.7); }
+.server-item.active .connect-btn:hover { background: rgba(255,255,255,0.2); }
+
+/* ============ Footer ============ */
+.sidebar-footer {
+  padding: 8px 12px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+.sidebar-footer .spacer { flex: 1; }
+.sidebar-footer button {
+  background: none;
+  border: none;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  font-size: 14px;
+  transition: all 0.15s;
+}
+.sidebar-footer button:hover { background: var(--surface-raised); color: var(--text-primary); }
+
+/* ============ Main Content ============ */
+.main-content {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.content-toolbar {
+  height: 40px;
+  display: flex;
+  align-items: center;
+  padding: 0 14px;
+  gap: 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.tab-bar {
+  display: flex;
+  gap: 2px;
+  flex: 1;
+}
+.tab-item {
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-tertiary);
+  border-radius: 5px 5px 0 0;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: all 0.1s;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background: none;
+  border-top: none;
+  border-left: none;
+  border-right: none;
+}
+.tab-item:hover { color: var(--text-secondary); }
+.tab-item.active { color: var(--accent); border-bottom-color: var(--accent); }
+.tab-item .icon { font-size: 13px; }
+
+.toolbar-actions {
+  display: flex;
+  gap: 4px;
+}
+.toolbar-actions button {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  padding: 4px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: all 0.1s;
+}
+.toolbar-actions button:hover { background: var(--surface-raised); color: var(--text-primary); }
+.toolbar-actions button.danger { color: var(--red); }
+.toolbar-actions button.danger:hover { background: rgba(255,71,87,0.15); }
+
+/* ============ Content Area ============ */
+.content-area {
+  flex: 1;
+  overflow: auto;
+  padding: 16px;
+  background: var(--bg);
+}
+
+/* ============ File Browser ============ */
+.path-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 0 12px;
+  font-size: 13px;
+}
+.path-bar .segment {
+  padding: 2px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  color: var(--accent);
+  transition: background 0.1s;
+}
+.path-bar .segment:hover { background: rgba(79,142,247,0.12); }
+.path-bar .segment.current {
+  color: var(--text-primary);
+  font-weight: 500;
+  cursor: default;
+  background: none;
+}
+.path-bar .sep { color: var(--text-tertiary); font-size: 10px; }
+
+.file-grid-header {
+  display: grid;
+  grid-template-columns: 1fr 100px 160px;
+  padding: 6px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+}
+.file-grid-header span:hover { color: var(--text-secondary); }
+
+.file-row {
+  display: grid;
+  grid-template-columns: 1fr 100px 160px;
+  padding: 6px 10px;
+  font-size: 13px;
+  border-radius: 4px;
+  cursor: pointer;
+  align-items: center;
+  transition: background 0.08s;
+  margin: 1px 0;
+}
+.file-row:hover { background: var(--surface-raised); }
+.file-row.selected { background: rgba(79,142,247,0.15); }
+.file-row .name { display: flex; align-items: center; gap: 8px; }
+.file-row .name .file-icon { font-size: 15px; flex-shrink: 0; }
+.file-row .name .file-icon.dir { color: var(--accent); }
+.file-row .size, .file-row .date { color: var(--text-secondary); font-size: 12px; }
+.file-row .date { font-variant-numeric: tabular-nums; }
+
+/* ============ Monitor Dashboard ============ */
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.card {
+  background: var(--surface);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+.card-header {
+  padding: 10px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.card-body { padding: 14px; }
+
+.gauge-ring {
+  width: 72px; height: 72px;
+  border-radius: 50%;
+  position: relative;
+  flex-shrink: 0;
+}
+.gauge-ring svg { transform: rotate(-90deg); }
+.gauge-ring .center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.gauge-ring .center .unit { font-size: 11px; font-weight: 400; color: var(--text-tertiary); margin-left: 1px; }
+
+.metric-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 4px 0;
+}
+.metric-info { flex: 1; }
+.metric-label { font-size: 12px; color: var(--text-secondary); }
+.metric-bar {
+  height: 4px;
+  background: var(--border);
+  border-radius: 2px;
+  margin-top: 6px;
+  overflow: hidden;
+}
+.metric-bar .fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.5s ease;
+}
+
+.chart-area {
+  width: 100%;
+  height: 80px;
+  position: relative;
+  margin-top: 8px;
+}
+.chart-line {
+  position: absolute;
+  inset: 0;
+}
+
+/* ============ Terminal Preview ============ */
+.terminal-preview {
+  background: #0d0d12;
+  border-radius: var(--radius-sm);
+  padding: 14px;
+  font-family: 'SF Mono', 'Menlo', 'Monaco', monospace;
+  font-size: 13px;
+  line-height: 1.55;
+}
+.terminal-line { white-space: pre; }
+.terminal-line .prompt { color: var(--green); }
+.terminal-line .cmd { color: var(--text-primary); }
+.terminal-line .output { color: var(--text-secondary); }
+
+/* ============ Bottom Bar ============ */
+.bottom-bar {
+  height: 28px;
+  display: flex;
+  align-items: center;
+  padding: 0 14px;
+  gap: 16px;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+  font-size: 11px;
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+}
+.bottom-bar .item { display: flex; align-items: center; gap: 4px; }
+.bottom-bar .spacer { flex: 1; }
+.bottom-bar .success { color: var(--green); }
+.bottom-bar .busy { color: var(--orange); }
+
+/* ============ Design Variant Switcher ============ */
+.variant-bar {
+  display: flex;
+  gap: 8px;
+  padding: 12px 0;
+  justify-content: center;
+}
+.variant-btn {
+  padding: 8px 20px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s;
+  font-family: inherit;
+}
+.variant-btn:hover { border-color: var(--accent); color: var(--text-primary); }
+.variant-btn.active { background: var(--accent); color: white; border-color: var(--accent); }
+
+/* ============ Variants ============ */
+
+/* Variant A: Default (above) — Apple Pro aesthetic */
+
+/* Variant B: Compact + Dense */
+.variant-b .sidebar { --sidebar-w: 220px; }
+.variant-b .server-item { padding: 5px 8px; }
+.variant-b .server-name { font-size: 12px; }
+.variant-b .server-sub { font-size: 10px; }
+.variant-b .file-row { padding: 4px 8px; font-size: 12px; }
+.variant-b .card-header { padding: 8px 12px; font-size: 11px; }
+.variant-b .card-body { padding: 10px; }
+.variant-b .dashboard-grid { gap: 8px; }
+.variant-b .app-grid { grid-template-columns: 220px 1fr; }
+
+/* Variant C: Accent-heavy with colored groups */
+.variant-c .server-item.active { background: var(--green); }
+.variant-c .mode-btn.active { background: var(--green); }
+.variant-c .tab-item.active { color: var(--green); border-bottom-color: var(--green); }
+.variant-c .connect-btn:hover { background: var(--green); border-color: var(--green); }
+.variant-c .file-row.selected { background: rgba(76,217,100,0.12); }
+.variant-c .path-bar .segment { color: var(--green); }
+.variant-c .search-box input:focus { border-color: var(--green); }
+.variant-c .group-header { border-left: 2px solid var(--accent); padding-left: 8px; }
+.variant-c .group-header.prod { border-left-color: var(--red); }
+.variant-c .group-header.staging { border-left-color: var(--orange); }
+.variant-c .group-header.dev { border-left-color: var(--green); }
+.variant-c .group-header.personal { border-left-color: var(--accent); }
+
+/* Hide/show variants */
+.variant-container { display: none; }
+.variant-container.visible { display: block; }
+
+/* ============ Design Note ============ */
+.design-notes {
+  max-width: 1200px;
+  margin: 20px auto 0;
+  padding: 16px;
+  background: var(--surface);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+}
+.design-notes h3 { font-size: 14px; margin-bottom: 8px; color: var(--text-primary); }
+.design-notes ul { list-style: none; padding: 0; }
+.design-notes li {
+  font-size: 13px;
+  color: var(--text-secondary);
+  padding: 4px 0;
+  padding-left: 16px;
+  position: relative;
+}
+.design-notes li::before { content: '—'; position: absolute; left: 0; color: var(--text-tertiary); }
+.design-notes .tag {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 3px;
+  font-size: 11px;
+  font-weight: 600;
+  margin-right: 4px;
+}
+.tag.p0 { background: rgba(255,71,87,0.2); color: var(--red); }
+.tag.p1 { background: rgba(255,149,0,0.2); color: var(--orange); }
+.tag.p2 { background: rgba(79,142,247,0.2); color: var(--accent); }
+</style>
+</head>
+<body>
+
+<div style="flex:1;max-width:1240px">
+  <div class="variant-bar">
+    <button class="variant-btn active" data-variant="a">方案 A · Apple Pro</button>
+    <button class="variant-btn" data-variant="b">方案 B · 紧凑高效</button>
+    <button class="variant-btn" data-variant="c">方案 C · 彩色标签</button>
+  </div>
+
+  <!-- === Variant A === -->
+  <div class="variant-container visible" id="variant-a">
+    <div class="mac-window">
+      <div class="window-titlebar">
+        <div class="traffic-lights">
+          <div class="traffic-light red"></div>
+          <div class="traffic-light yellow"></div>
+          <div class="traffic-light green"></div>
+        </div>
+        <div class="window-title">ShellDeck</div>
+      </div>
+
+      <div class="app-grid">
+        <!-- Sidebar -->
+        <div class="sidebar">
+          <div class="sidebar-header">
+            <div class="mode-switcher">
+              <button class="mode-btn active">SSH 服务器</button>
+              <button class="mode-btn">本地终端</button>
+            </div>
+            <div class="search-box">
+              <span class="icon">⌕</span>
+              <input type="text" placeholder="搜索服务器..." />
+            </div>
+          </div>
+
+          <div class="server-list">
+            <div class="group-header">
+              <span class="arrow open">▶</span>
+              生产环境
+              <span class="count">3</span>
+            </div>
+            <div class="server-item active">
+              <div class="status-dot connected"></div>
+              <div class="server-info">
+                <div class="server-name">Web 主服务器</div>
+                <div class="server-sub">admin@web-01.prod.example.com:22</div>
+              </div>
+              <span class="server-badge">SSH</span>
+            </div>
+            <div class="server-item">
+              <div class="status-dot disconnected"></div>
+              <div class="server-info">
+                <div class="server-name">API 网关</div>
+                <div class="server-sub">admin@api-01.prod.example.com:22</div>
+              </div>
+              <button class="connect-btn">▶</button>
+            </div>
+            <div class="server-item">
+              <div class="status-dot failed"></div>
+              <div class="server-info">
+                <div class="server-name">数据库主节点</div>
+                <div class="server-sub">admin@db-master.prod:22</div>
+              </div>
+              <button class="connect-btn">↻</button>
+            </div>
+
+            <div class="group-header">
+              <span class="arrow">▶</span>
+              开发环境
+              <span class="count">2</span>
+            </div>
+            <div class="server-item">
+              <div class="status-dot connecting"></div>
+              <div class="server-info">
+                <div class="server-name">Dev API</div>
+                <div class="server-sub">dev@api.dev.example.com:2222</div>
+              </div>
+              <span class="server-badge">KEY</span>
+            </div>
+            <div class="server-item">
+              <div class="status-dot disconnected"></div>
+              <div class="server-info">
+                <div class="server-name">Dev Redis</div>
+                <div class="server-sub">dev@redis.dev.example.com:22</div>
+              </div>
+              <button class="connect-btn">▶</button>
+            </div>
+          </div>
+
+          <div class="sidebar-footer">
+            <span>v0.0.7</span>
+            <div class="spacer"></div>
+            <button title="偏好设置">⚙</button>
+          </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="main-content">
+          <div class="content-toolbar">
+            <div class="tab-bar">
+              <button class="tab-item active"><span class="icon">⊞</span> 终端</button>
+              <button class="tab-item"><span class="icon">⊟</span> 文件管理</button>
+              <button class="tab-item"><span class="icon">◉</span> 系统监控</button>
+              <button class="tab-item"><span class="icon">ⓘ</span> 信息</button>
+            </div>
+            <div class="toolbar-actions">
+              <button title="新建终端">＋</button>
+              <button class="danger" title="断开连接">⏻</button>
+            </div>
+          </div>
+
+          <div class="content-area">
+            <!-- Terminal View -->
+            <div class="terminal-preview">
+              <div class="terminal-line"><span class="prompt">admin@web-01:~$</span><span class="cmd"> </span></div>
+              <div class="terminal-line"><span class="prompt">admin@web-01:~$</span><span class="cmd"> docker ps</span></div>
+              <div class="terminal-line"><span class="output">CONTAINER ID   IMAGE          COMMAND       STATUS        PORTS</span></div>
+              <div class="terminal-line"><span class="output">a1b2c3d4e5f6   nginx:1.25     "nginx -g..."  Up 3 days     0.0.0.0:80->80/tcp</span></div>
+              <div class="terminal-line"><span class="output">f6e5d4c3b2a1   postgres:16    "postgres"    Up 3 days     0.0.0.0:5432->5432/tcp</span></div>
+              <div class="terminal-line"><span class="prompt">admin@web-01:~$</span><span class="cmd"> ▊</span></div>
+            </div>
+          </div>
+
+          <div class="bottom-bar">
+            <span class="item">◉ <span class="success">已连接</span></span>
+            <span class="item">⊡  web-01.prod.example.com</span>
+            <span class="item">◈  80×24</span>
+            <span class="spacer"></span>
+            <span class="item">⟳  3ms</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- === Variant B: File Browser View === -->
+  <div class="variant-container" id="variant-b">
+    <div class="mac-window">
+      <div class="window-titlebar">
+        <div class="traffic-lights"><div class="traffic-light red"></div><div class="traffic-light yellow"></div><div class="traffic-light green"></div></div>
+        <div class="window-title">ShellDeck — 文件管理</div>
+      </div>
+      <div class="app-grid" style="grid-template-columns: 220px 1fr">
+        <div class="sidebar" style="background:var(--surface)">
+          <div class="sidebar-header">
+            <div class="mode-switcher">
+              <button class="mode-btn">SSH 服务器</button>
+              <button class="mode-btn active">本地终端</button>
+            </div>
+            <div class="search-box">
+              <span class="icon">⌕</span>
+              <input type="text" placeholder="搜索..." />
+            </div>
+          </div>
+          <div class="server-list">
+            <div style="text-align:center;padding:40px 16px;color:var(--text-tertiary);font-size:12px">暂无本地终端<br><button style="margin-top:8px;padding:4px 14px;border:1px solid var(--border);background:var(--surface-raised);color:var(--text-secondary);border-radius:6px;cursor:pointer;font-size:12px">＋ 新建终端</button></div>
+          </div>
+          <div class="sidebar-footer"><span>v0.0.7</span><div class="spacer"></div><button>⚙</button></div>
+        </div>
+
+        <div class="main-content">
+          <div class="content-toolbar">
+            <div class="tab-bar">
+              <button class="tab-item"><span class="icon">⊞</span> 终端</button>
+              <button class="tab-item active"><span class="icon">⊟</span> 文件管理</button>
+              <button class="tab-item"><span class="icon">◉</span> 系统监控</button>
+              <button class="tab-item"><span class="icon">ⓘ</span> 信息</button>
+            </div>
+            <div class="toolbar-actions">
+              <button>＋ 上传</button>
+              <button>↻ 刷新</button>
+            </div>
+          </div>
+
+          <div class="content-area">
+            <div class="path-bar">
+              <span class="segment">/</span><span class="sep">›</span>
+              <span class="segment">var</span><span class="sep">›</span>
+              <span class="segment">log</span><span class="sep">›</span>
+              <span class="segment">nginx</span><span class="sep">›</span>
+              <span class="segment current">access.log</span>
+            </div>
+
+            <div class="file-grid-header">
+              <span>名称</span>
+              <span style="text-align:right">大小</span>
+              <span>修改日期</span>
+            </div>
+
+            <div class="file-row">
+              <div class="name"><span class="file-icon dir">📁</span> ..</div>
+              <div class="size">—</div>
+              <div class="date">—</div>
+            </div>
+            <div class="file-row">
+              <div class="name"><span class="file-icon dir">📁</span> nginx</div>
+              <div class="size">—</div>
+              <div class="date">2026-05-28 14:32</div>
+            </div>
+            <div class="file-row">
+              <div class="name"><span class="file-icon dir">📁</span> postgresql</div>
+              <div class="size">—</div>
+              <div class="date">2026-05-30 09:15</div>
+            </div>
+            <div class="file-row selected">
+              <div class="name"><span class="file-icon">📄</span> access.log</div>
+              <div class="size">2.4 MB</div>
+              <div class="date">2026-06-05 20:48</div>
+            </div>
+            <div class="file-row">
+              <div class="name"><span class="file-icon">📄</span> error.log</div>
+              <div class="size">128 KB</div>
+              <div class="date">2026-06-05 19:12</div>
+            </div>
+            <div class="file-row">
+              <div class="name"><span class="file-icon">📄</span> app.log</div>
+              <div class="size">856 KB</div>
+              <div class="date">2026-06-05 18:00</div>
+            </div>
+          </div>
+
+          <div class="bottom-bar">
+            <span class="item">◉ <span class="success">已连接</span></span>
+            <span class="item">⊡  web-01.prod</span>
+            <span class="item">📂  6 个项目</span>
+            <span class="spacer"></span>
+            <span class="item" style="color:var(--accent)">⬆  传输中: access.log (67%)</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- === Variant C: Dashboard View === -->
+  <div class="variant-container" id="variant-c">
+    <div class="mac-window">
+      <div class="window-titlebar">
+        <div class="traffic-lights"><div class="traffic-light red"></div><div class="traffic-light yellow"></div><div class="traffic-light green"></div></div>
+        <div class="window-title">ShellDeck — 系统监控</div>
+      </div>
+      <div class="app-grid">
+        <div class="sidebar">
+          <div class="sidebar-header">
+            <div class="mode-switcher">
+              <button class="mode-btn active">SSH 服务器</button>
+              <button class="mode-btn">本地终端</button>
+            </div>
+            <div class="search-box">
+              <span class="icon">⌕</span>
+              <input type="text" placeholder="搜索服务器..." />
+            </div>
+          </div>
+          <div class="server-list">
+            <div class="group-header prod"><span class="arrow open">▶</span> 生产 <span class="count">2</span></div>
+            <div class="server-item active">
+              <div class="status-dot connected"></div>
+              <div class="server-info">
+                <div class="server-name">Web 主服务器</div>
+                <div class="server-sub">web-01.prod (8C/16G)</div>
+              </div>
+              <span class="server-badge">SSH</span>
+            </div>
+            <div class="server-item">
+              <div class="status-dot connected"></div>
+              <div class="server-info">
+                <div class="server-name">API 网关</div>
+                <div class="server-sub">api-01.prod (4C/8G)</div>
+              </div>
+              <span class="server-badge">SSH</span>
+            </div>
+            <div class="group-header staging"><span class="arrow">▶</span> 预发布 <span class="count">1</span></div>
+            <div class="group-header dev"><span class="arrow">▶</span> 开发 <span class="count">2</span></div>
+            <div class="group-header personal"><span class="arrow open">▶</span> 个人 <span class="count">1</span></div>
+            <div class="server-item">
+              <div class="status-dot disconnected"></div>
+              <div class="server-info">
+                <div class="server-name">树莓派 HomeLab</div>
+                <div class="server-sub">pi@192.168.1.100:22</div>
+              </div>
+              <button class="connect-btn">▶</button>
+            </div>
+          </div>
+          <div class="sidebar-footer"><span>v0.0.7</span><div class="spacer"></div><button>⚙</button></div>
+        </div>
+
+        <div class="main-content">
+          <div class="content-toolbar">
+            <div class="tab-bar">
+              <button class="tab-item"><span class="icon">⊞</span> 终端</button>
+              <button class="tab-item"><span class="icon">⊟</span> 文件管理</button>
+              <button class="tab-item active"><span class="icon">◉</span> 系统监控</button>
+              <button class="tab-item"><span class="icon">ⓘ</span> 信息</button>
+            </div>
+            <div class="toolbar-actions">
+              <button title="刷新数据">↻</button>
+              <button class="danger" title="断开连接">⏻</button>
+            </div>
+          </div>
+
+          <div class="content-area">
+            <div class="dashboard-grid">
+              <!-- CPU Card -->
+              <div class="card">
+                <div class="card-header"><span>⚡</span> CPU 使用率</div>
+                <div class="card-body">
+                  <div class="metric-row">
+                    <div class="gauge-ring">
+                      <svg width="72" height="72" viewBox="0 0 72 72">
+                        <circle cx="36" cy="36" r="30" fill="none" stroke="var(--border)" stroke-width="5"/>
+                        <circle cx="36" cy="36" r="30" fill="none" stroke="#4f8ef7" stroke-width="5"
+                          stroke-dasharray="188.5" stroke-dashoffset="56.5" stroke-linecap="round"/>
+                      </svg>
+                      <div class="center">42<span class="unit">%</span></div>
+                    </div>
+                    <div class="metric-info">
+                      <div class="metric-label">用户 32% · 系统 10% · 空闲 58%</div>
+                      <div class="metric-bar"><div class="fill" style="width:42%;background:var(--accent)"></div></div>
+                      <div style="font-size:11px;color:var(--text-tertiary);margin-top:4px">8 核 · 负载 3.2</div>
+                    </div>
+                  </div>
+                  <div class="chart-area">
+                    <svg width="100%" height="80" viewBox="0 0 300 80" preserveAspectRatio="none">
+                      <polyline points="0,70 20,60 40,65 60,55 80,50 100,45 120,55 140,40 160,35 180,30 200,45 220,35 240,40 260,42 280,38 300,33"
+                        fill="none" stroke="var(--accent)" stroke-width="1.5" opacity="0.5"/>
+                      <path d="M0,70 L20,60 L40,65 L60,55 L80,50 L100,45 L120,55 L140,40 L160,35 L180,30 L200,45 L220,35 L240,40 L260,42 L280,38 L300,33 L300,80 L0,80 Z"
+                        fill="url(#cpuGrad)" opacity="0.15"/>
+                      <defs><linearGradient id="cpuGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--accent)"/><stop offset="1" stop-color="var(--accent)" stop-opacity="0"/></linearGradient></defs>
+                    </svg>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Memory Card -->
+              <div class="card">
+                <div class="card-header"><span>📝</span> 内存使用率</div>
+                <div class="card-body">
+                  <div class="metric-row">
+                    <div class="gauge-ring">
+                      <svg width="72" height="72" viewBox="0 0 72 72">
+                        <circle cx="36" cy="36" r="30" fill="none" stroke="var(--border)" stroke-width="5"/>
+                        <circle cx="36" cy="36" r="30" fill="none" stroke="#4cd964" stroke-width="5"
+                          stroke-dasharray="188.5" stroke-dashoffset="75.4" stroke-linecap="round"/>
+                      </svg>
+                      <div class="center">12<span class="unit">%</span></div>
+                    </div>
+                    <div class="metric-info">
+                      <div class="metric-label">已用 1.9 GB · 总计 16 GB</div>
+                      <div class="metric-bar"><div class="fill" style="width:12%;background:var(--green)"></div></div>
+                      <div style="font-size:11px;color:var(--text-tertiary);margin-top:4px">缓存 6.2 GB · 可用 7.9 GB</div>
+                    </div>
+                  </div>
+                  <div class="chart-area">
+                    <svg width="100%" height="80" viewBox="0 0 300 80" preserveAspectRatio="none">
+                      <polyline points="0,75 20,72 40,70 60,65 80,60 100,55 120,50 140,55 160,65 180,70 200,68 220,65 240,70 260,68 280,72 300,70"
+                        fill="none" stroke="var(--green)" stroke-width="1.5" opacity="0.5"/>
+                      <path d="M0,75 L20,72 L40,70 L60,65 L80,60 L100,55 L120,50 L140,55 L160,65 L180,70 L200,68 L220,65 L240,70 L260,68 L280,72 L300,70 L300,80 L0,80 Z"
+                        fill="url(#memGrad)" opacity="0.15"/>
+                      <defs><linearGradient id="memGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--green)"/><stop offset="1" stop-color="var(--green)" stop-opacity="0"/></linearGradient></defs>
+                    </svg>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Disk Card — full width -->
+              <div class="card" style="grid-column:1/-1">
+                <div class="card-header"><span>💾</span> 磁盘使用率</div>
+                <div class="card-body">
+                  <div class="metric-row">
+                    <div class="gauge-ring">
+                      <svg width="72" height="72" viewBox="0 0 72 72">
+                        <circle cx="36" cy="36" r="30" fill="none" stroke="var(--border)" stroke-width="5"/>
+                        <circle cx="36" cy="36" r="30" fill="none" stroke="#ff9500" stroke-width="5"
+                          stroke-dasharray="188.5" stroke-dashoffset="113.1" stroke-linecap="round"/>
+                      </svg>
+                      <div class="center">64<span class="unit">%</span></div>
+                    </div>
+                    <div class="metric-info">
+                      <div class="metric-label">已用 157 GB · 总计 245 GB</div>
+                      <div class="metric-bar"><div class="fill" style="width:64%;background:var(--orange)"></div></div>
+                      <div style="font-size:11px;color:var(--text-tertiary);margin-top:4px">/ 根分区 · 预计剩余空间 23 天</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="bottom-bar">
+            <span class="item">◉ <span class="success">已连接</span></span>
+            <span class="item">⟳  轮询 3s</span>
+            <span class="spacer"></span>
+            <span class="item">平台: Linux</span>
+            <span class="item">🕐  2026-06-05 20:48:32</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ Design Notes ============ -->
+  <div class="design-notes">
+    <h3>设计反思 · ShellDeck UI Redesign 核心变更</h3>
+    <ul>
+      <li><span class="tag p0">P0</span> <strong>侧边栏·搜索</strong> — 添加 `searchable` 输入框，解决大量服务器时无法搜索的问题</li>
+      <li><span class="tag p0">P0</span> <strong>文件管理器·原生 Table</strong> — 从 `ScrollView+LazyVStack` 改为 `Table` (macOS 13+)，获得原生列排序、键盘导航、删除键支持</li>
+      <li><span class="tag p1">P1</span> <strong>底部状态栏</strong> — 新增连接状态/延迟/平台信息，避免用户猜当前状态</li>
+      <li><span class="tag p1">P1</span> <strong>分组视觉区分</strong> — 方案 C 中分组的彩色左边框让环境一目了然（红=生产、橙=预发布、绿=开发、蓝=个人）</li>
+      <li><span class="tag p1">P1</span> <strong>信息密度优化</strong> — 方案 B 更紧凑的间距适应专业用户多服务器场景</li>
+      <li><span class="tag p2">P2</span> <strong>视觉统一</strong> — 统一定义 `--surface`、`--border`、`--accent` 色彩变量，清除各处硬编码色值</li>
+      <li><span class="tag p2">P2</span> <strong>标签栏移到顶部</strong> — 终端/文件/监控/信息标签从 toolbar 内嵌改为独立标签栏，更清晰</li>
+      <li><span class="tag p2">P2</span> <strong>连接按钮</strong> — 悬浮圆形按钮替代文字链接，降低视觉噪音</li>
+      <li><span class="tag p2">P2</span> <strong>移除 AnyView</strong> — 已通过 `@ViewBuilder` 条件分支替换所有 `AnyView`</li>
+    </ul>
+  </div>
+</div>
+
+<script>
+document.querySelectorAll('.variant-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.variant-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    document.querySelectorAll('.variant-container').forEach(c => c.classList.remove('visible'));
+    document.getElementById('variant-' + btn.dataset.variant).classList.add('visible');
+  });
+});
+</script>
+
+</body>
+</html>

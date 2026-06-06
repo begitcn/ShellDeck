@@ -1,0 +1,122 @@
+name: "Business Plan"
+description: "Market research → financial forecast + product roadmap → executive summary — generates a complete business plan"
+
+agents_dir: "agency-agents"
+
+llm:
+  provider: "deepseek"
+  model: "deepseek-chat"
+  max_tokens: 4096
+
+concurrency: 2
+
+inputs:
+  - name: idea
+    description: "Business idea / project description (one paragraph)"
+    required: true
+  - name: stage
+    description: "Project stage (e.g. seed round, Series A, internal greenfield)"
+    required: false
+    default: "seed round"
+  - name: market
+    description: "Target market (e.g. US SMBs, SEA e-commerce, global developers)"
+    required: false
+    default: "global"
+
+steps:
+  - id: market_research
+    role: "product/product-trend-researcher"
+    task: |
+      Conduct market research for the following business idea.
+
+      Idea: {{idea}}
+      Target market: {{market}}
+      Stage: {{stage}}
+
+      Deliver:
+      1. **Market size** (TAM / SAM / SOM)
+      2. **Industry trends** (3-5 growth drivers)
+      3. **Competitive landscape** (incumbents, concentration, barriers)
+      4. **Target customer persona** (early adopters, pain points, willingness to pay)
+      5. **Regulatory / policy environment** (tailwinds and risks)
+    output: market_report
+
+  - id: financial_model
+    role: "finance/finance-fpa-analyst"
+    task: |
+      Based on the market research, build a financial forecast model.
+
+      {{market_report}}
+
+      Business idea: {{idea}}
+      Stage: {{stage}}
+
+      Deliver:
+      1. **Business model** (revenue streams, pricing, unit economics)
+      2. **3-year forecast** (table: revenue, COGS, gross margin, net income, by quarter)
+      3. **Key assumptions** (CAC, conversion, retention, ARPU)
+      4. **Funding requirement** (how much, use of funds, runway)
+      5. **Break-even analysis**
+    output: financial_plan
+    depends_on: [market_research]
+
+  - id: product_roadmap
+    role: "product/product-manager"
+    task: |
+      Based on the market research, design the product roadmap.
+
+      {{market_report}}
+
+      Business idea: {{idea}}
+
+      Deliver:
+      1. **Core value proposition** (one-sentence: for whom, solving what)
+      2. **MVP definition** (what's in, what's explicitly out)
+      3. **Roadmap** (3 phases: goals, features, milestones)
+      4. **Defensibility** (tech / data / network effects / brand — what builds a moat)
+      5. **Team needs** (what roles at each phase)
+    output: product_plan
+    depends_on: [market_research]
+
+  - id: executive_summary
+    role: "support/support-executive-summary-generator"
+    task: |
+      Synthesize the above into a complete business plan.
+
+      ## Market Research
+      {{market_report}}
+
+      ## Financial Forecast
+      {{financial_plan}}
+
+      ## Product Roadmap
+      {{product_plan}}
+
+      Format (for investors / decision makers):
+
+      # [Project Name] Business Plan
+
+      ## Executive Summary (1 page — most important)
+      - One-line description
+      - Market opportunity
+      - Business model
+      - Team strengths
+      - Funding ask and use of funds
+
+      ## Market Analysis
+      [Synthesize market research]
+
+      ## Product Strategy
+      [Synthesize product roadmap]
+
+      ## Financial Plan
+      [Synthesize financial forecast]
+
+      ## Milestones & Timeline
+      [Extract from roadmap]
+
+      ## Risks & Mitigation
+      [Pull risks from each section, provide mitigation strategy]
+
+      Style: professional, data-driven, suitable for investor / executive review.
+    depends_on: [financial_model, product_roadmap]
