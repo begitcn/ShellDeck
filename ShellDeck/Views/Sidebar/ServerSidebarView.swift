@@ -228,6 +228,7 @@ struct ServerSidebarView: View {
                 ForEach(items) { session in
                     localTerminalRow(session)
                         .tag(SidebarItem.local(session.id))
+                        .padding(.leading, 12)
                 }
             }
         } header: {
@@ -267,16 +268,12 @@ struct ServerSidebarView: View {
             }
             .padding(.horizontal, 2)
             .padding(.top, 4)
-            .background(alignment: .top) {
-                Divider()
-                    .padding(.top, 2)
-            }
             .contentShape(Rectangle())
             .onTapGesture { toggleGroup(localTerminalSectionID) }
         }
     }
 
-    private let localTerminalSectionID = UUID()
+    @State private var localTerminalSectionID = UUID()
 
     private func localTerminalRow(_ session: LocalTerminalSession) -> some View {
         HStack(spacing: 8) {
@@ -383,8 +380,12 @@ struct ServerSidebarView: View {
 
     private func toggleGroup(_ id: UUID) {
         withAnimation(.easeInOut(duration: 0.15)) {
-            if expandedGroups.contains(id) { expandedGroups.remove(id) }
-            else { expandedGroups.insert(id) }
+            if expandedGroups.contains(id) {
+                expandedGroups.remove(id)
+            } else {
+                expandedGroups.removeAll()
+                expandedGroups.insert(id)
+            }
         }
     }
 

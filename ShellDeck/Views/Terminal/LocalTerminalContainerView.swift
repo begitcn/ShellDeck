@@ -46,7 +46,7 @@ private final class LocalTerminalPaddingContainer: NSView {
         addSubview(terminalView)
         
         NSLayoutConstraint.activate([
-            terminalView.topAnchor.constraint(equalTo: topAnchor, constant: padding),
+            terminalView.topAnchor.constraint(equalTo: topAnchor),
             terminalView.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -padding),
             terminalView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: padding),
             terminalView.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -padding)
