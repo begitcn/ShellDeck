@@ -11,6 +11,16 @@
 		DCE5F1B22FC5831D00AB26F0 /* Citadel in Frameworks */ = {isa = PBXBuildFile; productRef = D470153919404D91A655614F /* Citadel */; };
 /* End PBXBuildFile section */
 
+/* Begin PBXContainerItemProxy section */
+		DCE5FF0B2FCF000000AB26F0 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = DCE5EE8D2FC5371E00AB26F0 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = DCE5EE942FC5371E00AB26F0;
+			remoteInfo = ShellDeck;
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXFileReference section */
 		DCE5EE952FC5371E00AB26F0 /* ShellDeck.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ShellDeck.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		DCE5FF002FCF000000AB26F0 /* ShellDeckTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ShellDeckTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -37,8 +47,6 @@
 		};
 		DCE5FF012FCF000000AB26F0 /* ShellDeckTests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-			);
 			path = ShellDeckTests;
 			sourceTree = "<group>";
 		};
@@ -238,16 +246,6 @@
 		};
 /* End PBXTargetDependency section */
 
-/* Begin PBXContainerItemProxy section */
-		DCE5FF0B2FCF000000AB26F0 /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = DCE5EE8D2FC5371E00AB26F0 /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = DCE5EE942FC5371E00AB26F0;
-			remoteInfo = ShellDeck;
-		};
-/* End PBXContainerItemProxy section */
-
 /* Begin XCBuildConfiguration section */
 		DCE5EE9E2FC5371E00AB26F0 /* Debug */ = {
 			isa = XCBuildConfiguration;
@@ -442,6 +440,7 @@
 		DCE5FF072FCF000000AB26F0 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = MCR7XLP8BR;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -453,13 +452,13 @@
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/ShellDeck.app/Contents/MacOS/ShellDeck";
-				BUNDLE_LOADER = "$(TEST_HOST)";
 			};
 			name = Debug;
 		};
 		DCE5FF082FCF000000AB26F0 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = MCR7XLP8BR;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -471,7 +470,6 @@
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/ShellDeck.app/Contents/MacOS/ShellDeck";
-				BUNDLE_LOADER = "$(TEST_HOST)";
 			};
 			name = Release;
 		};

@@ -141,4 +141,5 @@ final class TerminalViewModel {
             outputBuffer.removeFirst(outputBuffer.count - maxBufferedBytes)
         }
     }
+
 }

@@ -46,6 +46,7 @@ struct ShellDeckApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .withToast()
                 .preferredColorScheme(AppTheme(rawValue: appTheme)?.colorScheme)
                 .onAppear {
                     updateWindowAppearance(for: AppTheme(rawValue: appTheme) ?? .dark)

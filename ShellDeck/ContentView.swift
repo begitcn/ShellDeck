@@ -179,8 +179,7 @@ struct ContentView: View {
             Button("连接到服务器") {
                 connect(to: server)
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
+            .buttonStyle(SDPrimaryButtonStyle())
         }
     }
 
@@ -343,7 +342,7 @@ struct ContentView: View {
                 .multilineTextAlignment(.center)
                 .padding(.horizontal)
             Button("重试") { connect(to: server) }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(SDPrimaryButtonStyle())
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -352,6 +351,7 @@ struct ContentView: View {
 
     private func connect(to server: Server) {
         connectTasks[server.id]?.cancel()
+        let name = server.displayName.isEmpty ? server.host : server.displayName
         connectTasks[server.id] = Task {
             if let existing = connections[server.id] {
                 await existing.disconnect()
@@ -359,16 +359,22 @@ struct ContentView: View {
             guard !Task.isCancelled else { return }
             let conn = ServerConnection(server: server)
             connections[server.id] = conn
+            ToastManager.shared.show("正在连接到 \(name)...", level: .info)
             await conn.connect(to: server)
+            if !Task.isCancelled, conn.state == .connected {
+                ToastManager.shared.show("已连接到 \(name)", level: .success)
+            }
         }
     }
 
     private func disconnect(_ server: Server) {
+        let name = server.displayName.isEmpty ? server.host : server.displayName
         connectTasks[server.id]?.cancel()
         connectTasks[server.id] = nil
         guard let conn = connections.removeValue(forKey: server.id) else { return }
         selectedTabsByServer[server.id] = nil
         filePathsByServer[server.id] = nil
+        ToastManager.shared.show("已断开 \(name)", level: .info)
         Task { await conn.disconnect() }
     }
 

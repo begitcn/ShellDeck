@@ -33,6 +33,11 @@ struct ServerSidebarView: View {
     @State private var renameGroupName = ""
     @State private var showDeleteGroupConfirmation = false
     @State private var groupToDelete: ServerGroup?
+    @State private var showRenameSheet = false
+    @State private var serverToRename: Server?
+    @State private var renameServerName = ""
+
+    @FocusState private var isSearchFocused: Bool
 
     @State private var expandedGroups: Set<UUID> = []
 
@@ -59,7 +64,14 @@ struct ServerSidebarView: View {
         .sheet(isPresented: $showAddGroupSheet) { addGroupSheet }
         .sheet(isPresented: $showRenameGroupSheet) { renameGroupSheet }
         .sheet(isPresented: $showRenameLocalSheet) { renameLocalSheet }
+        .sheet(isPresented: $showRenameSheet) { renameServerSheet }
         .sheet(isPresented: $showSettingsSheet) { SettingsView() }
+        .background {
+            Button("") { isSearchFocused = true }
+                .keyboardShortcut("k", modifiers: .command)
+                .opacity(0)
+                .allowsHitTesting(false)
+        }
         .confirmationDialog("确认删除", isPresented: $showDeleteConfirmation, presenting: serverToDelete)
         { server in
             Button("删除", role: .destructive) { deleteServer(server); if case .server(let id) = selection, id == server.id { selection = nil } }
@@ -125,6 +137,7 @@ struct ServerSidebarView: View {
             TextField("搜索服务器或终端...", text: $searchText)
                 .textFieldStyle(.plain)
                 .font(.callout)
+                .focused($isSearchFocused)
             if !searchText.isEmpty {
                 Button { searchText = "" } label: {
                     Image(systemName: "xmark.circle.fill")
@@ -562,7 +575,12 @@ struct ServerSidebarView: View {
             Button("重试", systemImage: "arrow.clockwise") { onConnect(server) }
         }
         Divider()
-        Button("编辑", systemImage: "pencil") { editingServer = server }
+        Button("重命名", systemImage: "pencil.line") {
+            serverToRename = server
+            renameServerName = server.displayName.isEmpty ? server.host : server.displayName
+            showRenameSheet = true
+        }
+        Button("编辑", systemImage: "slider.horizontal.3") { editingServer = server }
         Divider()
         Button("删除", systemImage: "trash", role: .destructive) {
             serverToDelete = server; showDeleteConfirmation = true
@@ -607,5 +625,37 @@ struct ServerSidebarView: View {
         localManager.renameSession(id: session.id, title: title)
         showRenameLocalSheet = false
         localSessionToRename = nil
+    }
+
+    // MARK: - Server Rename Sheet
+
+    private var renameServerSheet: some View {
+        NavigationStack {
+            Form {
+                TextField("服务器名称", text: $renameServerName)
+                    .onSubmit { renameServer() }
+            }
+            .formStyle(.grouped)
+            .navigationTitle("重命名服务器")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("取消") { showRenameSheet = false }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("保存") { renameServer() }
+                        .disabled(renameServerName.trimmingCharacters(in: .whitespaces).isEmpty)
+                }
+            }
+        }
+        .frame(minWidth: 300)
+    }
+
+    private func renameServer() {
+        guard let server = serverToRename else { return }
+        let name = renameServerName.trimmingCharacters(in: .whitespaces)
+        guard !name.isEmpty else { return }
+        server.displayName = name
+        showRenameSheet = false
+        serverToRename = nil
     }
 }
